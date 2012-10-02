@@ -1788,9 +1788,11 @@ class CameraCalibrationOperator(bpy.types.Operator):
             '''
             if scn.optical_center_type == 'camdata':
                 #get the principal point location from camera data
-                P = activeSpace.clip.tracking.camera.principal
+                P = [x for x in  activeSpace.clip.tracking.camera.principal]
+                print("camera data optical center", P[:])
                 P[0] /= imageWidth
                 P[1] /= imageHeight
+                print("normlz. optical center", P[:])
                 P = self.relImgCoords2ImgPlaneCoords(P, imageWidth, imageHeight)
             elif scn.optical_center_type == 'compute':
                 if len(vpLineSets) < 3:
@@ -1863,8 +1865,9 @@ class CameraCalibrationOperator(bpy.types.Operator):
         self.report({'INFO'}, "Camera focal length set to " + str(fMm))
         
         #move principal point of the blender camera
-        cam.data.shift_x = -0.5 * P[0]
-        cam.data.shift_y = -0.5 * P[1]
+        r = imageWidth / float(imageHeight)
+        cam.data.shift_x = -1 * P[0] / r
+        cam.data.shift_y = -1 * P[1] / r
         
         '''
         set the camera background image
