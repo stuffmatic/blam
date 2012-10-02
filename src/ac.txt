@@ -1,0 +1,80 @@
+/*
+blam - Blender Camera Calibration Tools
+Copyright (C) 2012  Per Gantelius
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see http://www.gnu.org/licenses/
+*/
+
+/*
+This Maxima (http://maxima.sourceforge.net/) script 
+computes closed form expressions for the coefficients
+of equations 27-28 from Recovery of Intrinsic and Extrinsic 
+Camera Parameters Using Perspective Views of Rectangles by
+T. N. Tan, G. D. Sullivan and K. D. Baker
+http://www.bmva.org/bmvc/1995/bmvc-95-017.pdf
+*/
+
+/*Define lambdaB and lambdaC as in (26) */
+nB : (Qad*lD - 1);
+dB : (Qbd*lD - Qab);
+lB : nB / dB;
+
+nC : (Qad*lD - lD^2);
+dC : (Qac - Qcd * lD);
+lC : nC / dC;
+
+/*Substitute lambdaB and lambdaC on the right hand side of (23)*/
+eq23rh : lB^2 - Qab * lB - Qbc * lB * lC + Qac * lC;
+
+/*Substitute lambdaB and lambdaC on the right hand side of (24)*/
+eq24rh : lC^2 - Qbc * lB * lC - Qcd * lC * lD + Qbd * lB * lD;
+
+/*Multiply (23) by dB^2dC to get (27).*/
+eq27rh : ratsimp(dB^2 * dC * eq23rh);
+
+/*Multiply (24) by dC^2dB to get (28).
+ Divide the result by lambdaD since 
+ otherwise we get a 5th degree
+ equation with a zero constant term*/
+eq28rh : ratsimp((dC^2 * dB * eq24rh) / lD);
+
+/*Compute coefficients of (27)*/
+C4 : expand(coeff(eq27rh, lD, 4));
+C3 : expand(coeff(eq27rh, lD, 3));
+C2 : expand(coeff(eq27rh, lD, 2));
+C1 : expand(coeff(eq27rh, lD, 1));
+C0 : expand(coeff(eq27rh, lD, 0));
+
+/*Compute coefficients of (28)*/
+B4 : expand(coeff(eq28rh, lD, 4));
+B3 : expand(coeff(eq28rh, lD, 3));
+B2 : expand(coeff(eq28rh, lD, 2));
+B1 : expand(coeff(eq28rh, lD, 1));
+B0 : expand(coeff(eq28rh, lD, 0));
+
+
+/*Output coefficients*/
+print("Coefficients for equation (27)");
+C4;
+C3;
+C2;
+C1;
+C0;
+
+print("Coefficients for equation (28)");
+B4;
+B3;
+B2;
+B1;
+B0;
