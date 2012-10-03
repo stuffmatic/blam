@@ -18,7 +18,7 @@ The easiest way to get involved is testing the add-on and [providing bug reports
 
 If you're interested in helping out on the coding side, let me know. 
 
-# Nerdy details
+# Getting nerdy
 
 * The focal length and camera orientation estimation is based on [Using Vanishing Points for Camera Calibration and Coarse 3D Reconstruction from a Single Image](http://www.irisa.fr/prive/kadi/Reconstruction/paper.ps.gz) by E. Guillou, D. Meneveaux, E. Maisel, K. Bouatouch. 
 * The algorithm for 3D reconstruction of rectangle based geometry is an extension of the AC algorithm described in [Recovery of Intrinsic and Extrinsic Camera Parameters Using Perspective Views of Rectangles](http://www.bmva.org/bmvc/1995/bmvc-95-017.pdf) by T. N. Tan, G. D. Sullivan and K. D. Baker. 
