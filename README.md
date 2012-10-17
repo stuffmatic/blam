@@ -10,7 +10,7 @@ Bugs can be reported [here](https://github.com/stuffmatic/blam/issues).
 
 1. [Download the latest release](https://github.com/stuffmatic/blam/downloads) (or [get the latest git revision](https://github.com/stuffmatic/blam/blob/master/src/blam.py)).
 2. [Install](http://wiki.blender.org/index.php/Doc:2.6/Manual/Extensions/Python/Add-Ons)
-3. Check out the [introduction video](https://vimeo.com/35153437) and [read the user's guide](https://github.com/stuffmatic/blam/wiki/User%27s-guide). There is also a slightly outdated tutorial video [here](https://vimeo.com/35421849).
+3. Check out the [introduction video](https://vimeo.com/35153437), [this tutorial video](https://vimeo.com/35421849) and [read the user's guide](https://github.com/stuffmatic/blam/wiki/User%27s-guide).
 
 # Getting involved
 
