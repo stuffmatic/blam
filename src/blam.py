@@ -1884,8 +1884,6 @@ class CameraCalibrationOperator(bpy.types.Operator):
         
 
 def initSceneProps():
-    scn = bpy.context.scene
-    
     '''
     Focal length and orientation estimation stuff
     '''
