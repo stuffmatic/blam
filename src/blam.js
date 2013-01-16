@@ -223,8 +223,8 @@ function dot(v1, v2)
 
 function vecSubtract(v1, v2)
 {
-    console.log("subtr: v1 = " + v1 + ", v2 = " + v2);
-    return [v2[0] - v1[0], v2[1] - v1[1]];
+    //console.log("subtr: v1 = " + v1 + ", v2 = " + v2);
+    return [v1[0] - v2[0], v1[1] - v2[1]];
 }
 
 function truncateFloat(f)
@@ -283,7 +283,7 @@ function computeFocalLength(Fu, Fv, P)
     //print("FuFv", FuFv, "FvPuv + FuPuv", FvPuv + FuPuv)
    
     var dirFuFv = normalize(vecSubtract(Fu, Fv));
-    var FvP = vecSubtract(Fu, Fv);
+    var FvP = vecSubtract(P, Fv);
     var proj = dot(dirFuFv, FvP);
     var Puv = [proj * dirFuFv[0] + Fv[0], proj * dirFuFv[1] + Fv[1]];
 
@@ -414,14 +414,6 @@ function computeVanishingPoint(segment1, segment2)
     return [x, y];
 }
 
-function relImgCoords2ImgPlaneCoords(pt, imageWidth, imageHeight)
-{
-    var ratio = imageWidth / imageHeight; //TODO: float division?
-    var sw = ratio;
-    var sh = 1;
-    return [sw * (pt[0] - 0.5), sh * (pt[1] - 0.5)];
-}
-
 function computeCameraParameters()
 {
         
@@ -441,13 +433,12 @@ function computeCameraParameters()
             var s1 = [controlPoints[4 * i], controlPoints[4 * i + 1]];
             var s2 = [controlPoints[4 * i + 2], controlPoints[4 * i + 3]];
             vanishingPoints[i] = computeVanishingPoint(s1, s2);
-            vpsImPlCoords[i] = relImgCoords2ImgPlaneCoords(vanishingPoints[i], imageWidth, imageHeight);
+            vpsImPlCoords[i] = relImageToImagePlane(vanishingPoints[i], imageWidth, imageHeight);
         }
     
-        window.computedPrincipalPoint =  computeTriangleOrthocenter(vpsImPlCoords);
-        //console.log("window.computedPrincipalPoint " + window.computedPrincipalPoint);
+        window.computedPrincipalPoint =  imagePlaneToRelImage(computeTriangleOrthocenter(vpsImPlCoords), imageWidth, imageHeight);
+        //console.log("window.computedPrincipalPoint " + window.computedPrincipalPoint + ", ipl " + computeTriangleOrthocenter(vpsImPlCoords));
 
-        
         //principal point in image plane coordinates
         var P = window.numVanishingPoints == 3 ? window.computedPrincipalPoint : controlPoints[CP_PRINCIPAL];
         
@@ -477,7 +468,7 @@ function computeCameraParameters()
             //print("fAbs", fAbs, "f rel", f)
              */
             var f = 0.7;
-            Fu = relImgCoords2ImgPlaneCoords(vp1, imageWidth, imageHeight);
+            Fu = relImageToImagePlane(vp1, imageWidth, imageHeight);
             Fv = computeSecondVanishingPoint(Fu, f, P, horizDir);
         }
         else
@@ -494,7 +485,7 @@ function computeCameraParameters()
                 P[0] /= imageWidth
                 P[1] /= imageHeight
                 #print("normlz. optical center", P[:])
-                P = self.relImgCoords2ImgPlaneCoords(P, imageWidth, imageHeight)
+                P = self.relImageToImagePlane(P, imageWidth, imageHeight)
             elif scn.optical_center_type == 'compute':
                 if len(vpLineSets) < 3:
                     self.report({'ERROR'}, "A third grease pencil layer is needed to compute the optical center.")
@@ -502,7 +493,7 @@ function computeCameraParameters()
                 #compute the principal point using a vanishing point from a third gp layer.
                 #this computation does not rely on the order of the line sets
                 vps = [self.computeIntersectionPointForLineSegments(vpLineSets[i]) for i in range(len(vpLineSets))]
-                vps = [self.relImgCoords2ImgPlaneCoords(vps[i], imageWidth, imageHeight) for i in range(len(vps))]
+                vps = [self.relImageToImagePlane(vps[i], imageWidth, imageHeight) for i in range(len(vps))]
                 P = self.computeTriangleOrthocenter(vps)
             else:
                 #assume optical center in image midpoint
@@ -521,8 +512,8 @@ function computeCameraParameters()
             /*
             
             */
-            Fu = relImgCoords2ImgPlaneCoords(vanishingPoints[0], imageWidth, imageHeight);
-            Fv = relImgCoords2ImgPlaneCoords(vanishingPoints[1], imageWidth, imageHeight);
+            Fu = relImageToImagePlane(vanishingPoints[0], imageWidth, imageHeight);
+            Fv = relImageToImagePlane(vanishingPoints[1], imageWidth, imageHeight);
             
             var f = computeFocalLength(Fu, Fv, P);
             
@@ -690,7 +681,7 @@ function controlPointHitTest(x, y)
     //hit test in reverse draw order
     for (var i = CP_COUNT - 1; i >= 0; i--)
     {
-        var pSc = relImageToScreen(controlPoints[i][0], controlPoints[i][1]);
+        var pSc = relImageToCanvas(controlPoints[i][0], controlPoints[i][1]);
         var xi = pSc[0];
         var yi = pSc[1];
         
@@ -747,8 +738,8 @@ function onMouseMove(e)
     {
         var idx = window.draggedControlPoint;
         
-        var prevDragPosRel = screenToRelImage(window.prevDragPos[0], window.prevDragPos[1]);
-        var dragPosRel = screenToRelImage(x, y);
+        var prevDragPosRel = canvasToRelImage(window.prevDragPos[0], window.prevDragPos[1]);
+        var dragPosRel = canvasToRelImage(x, y);
         
         var dx = dragPosRel[0] - prevDragPosRel[0];
         var dy = dragPosRel[1] - prevDragPosRel[1];
@@ -808,8 +799,8 @@ function onMouseMove(e)
     
     if (0)
     {
-        var rel = screenToRelImage(x, y);
-        var sref = relImageToScreen(rel[0], rel[1]);
+        var rel = canvasToRelImage(x, y);
+        var sref = relImageToCanvas(rel[0], rel[1]);
         setLabelText(ID_INFO_LABEL, "sc: " + x + ", " + y + " - rel: " + rel[0] + ", " + rel[1] + " - sc ref: " + sref[0] + ", " + sref[1]);
     }
 }
@@ -961,8 +952,8 @@ function drawOverlay()
  */
 function drawLineSegment(ctx, start, end, endMarkers)
 {
-    var p0 = relImageToScreen(start[0], start[1]);
-    var p1 = relImageToScreen(end[0], end[1]);
+    var p0 = relImageToCanvas(start[0], start[1]);
+    var p1 = relImageToCanvas(end[0], end[1]);
     
     
 
@@ -984,7 +975,7 @@ function drawLineSegment(ctx, start, end, endMarkers)
  */
 function drawControlPoint(ctx, x, y, fill)
 {
-    var p0 = relImageToScreen(x, y);
+    var p0 = relImageToCanvas(x, y);
     ctx.beginPath();
     ctx.arc(p0[0], p0[1], SELECTION_RADIUS, 0 , 2 * Math.PI, false);
 
@@ -1373,7 +1364,7 @@ function getShareURL()
     return window.location + "?" + saveStateToQueryString();
 }
 
-function screenToRelImage(x, y)
+function canvasToRelImage(x, y)
 {
     var rect = getCurrentImageRectSc();
     
@@ -1387,7 +1378,7 @@ function screenToRelImage(x, y)
     return [xImRel, yImRel];
 }
 
-function relImageToScreen(x, y)
+function relImageToCanvas(x, y)
 {
     var rect = getCurrentImageRectSc();
     //console.log("x, y " + x + ", " + y);
@@ -1396,6 +1387,19 @@ function relImageToScreen(x, y)
     
     return [xIm, yIm];
 }
+
+function relImageToImagePlane(pt, imageWidth, imageHeight)
+{
+    var ratio = imageWidth / imageHeight;
+    return [ratio * (pt[0] - 0.5), pt[1] - 0.5];
+}
+
+function imagePlaneToRelImage(pt, imageWidth, imageHeight)
+{
+    var ratio = imageWidth / imageHeight;
+    return [pt[0] / ratio + 0.5, pt[1] + 0.5];
+}
+
 
 function reset()
 {
