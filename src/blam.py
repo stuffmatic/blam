@@ -20,14 +20,13 @@ import mathutils
 import math, cmath 
 
 bl_info = { \
-    'name': 'The Blender camera calibration toolkit',
+    'name': 'BLAM - The Blender camera calibration toolkit',
     'author': 'Per Gantelius',
-    'version': (0, 0, 1),
+    'version': (0, 0, 4),
     'blender': (2, 6, 0),
     'api': 41524,
     'location': 'Move Clip Editor > Tools Panel > Static Camera Calibration and 3D View > Tools Panel > Photo Modeling Tools',
     'description': 'Reconstruction of 3D geometry and estimation of camera orientation and focal length based on photographs.',
-    'warning': 'Functional, but still in development.',
     'tracker_url': 'http://code.google.com/p/blam/issues/list',
     'wiki_url': 'http://code.google.com/p/blam/w/list',
     'support': 'COMMUNITY',
@@ -431,7 +430,139 @@ def getMeshFaces(meshObject):
         return meshObject.data.polygons
 
 '''
-Algorithm stuff
+PROJECTOR CALIBRATION STUFF
+'''
+'''
+class ProjectorCalibrationPanel(bpy.types.Panel):
+    bl_label = "Video Projector Calibration"
+    bl_space_type = "CLIP_EDITOR"
+    bl_region_type = "TOOLS"
+    
+    def draw(self, context):
+        scn = bpy.context.scene
+        l = self.layout
+        r = l.row()
+        r.operator("object.create_proj_calib_win")
+
+        r = l.row()
+        r.operator("object.set_calib_window_to_clip")
+
+        r = l.row()
+        r.operator("object.set_calib_window_to_view3d")
+'''
+class CreateProjectorCalibrationWindowOperator(bpy.types.Operator):
+    bl_idname = "object.create_proj_calib_win"
+    bl_label = "Create calibration window"
+    bl_description = "TODO"
+    
+    def execute(self, context):
+        ws = bpy.context.window_manager.windows
+        if len(ws) > 1:
+            self.report({'ERROR'}, "Other windows exist. Close them and try again.")
+            return{'CANCELLED'}
+        
+        return bpy.ops.screen.area_dupli('INVOKE_DEFAULT')
+
+class SetCalibrationWindowToClipEditor(bpy.types.Operator):
+    bl_idname = "object.set_calib_window_to_clip"
+    bl_label = "Clip editor"
+    bl_description = ""
+    
+    def execute(self, context):
+        windows = bpy.context.window_manager.windows
+        if len(windows) > 2:
+            self.report({'ERROR'}, "Expected two windows. Found " + str(len(windows)))
+            return{'CANCELLED'}
+        
+        #operate on the window with one area
+        window = None
+        for w in windows:
+            areas = w.screen.areas
+            if len(areas) == 1:
+                window = w
+                break
+        
+        if not window:
+            self.report({'ERROR'}, "Could not find single area window.")
+            return{'CANCELLED'}
+                    
+        area = window.screen.areas[0]
+    
+        toolsHidden = False
+        propsHidden = False
+                    
+        for i in area.regions:
+            print(i.type, i.width, i.height)
+            if i.type == 'TOOLS' and i.width <= 1:
+                toolsHidden = True
+            elif i.type == 'TOOL_PROPS' and i.width <= 1:
+                propsHidden = True
+    
+        area.type = "CLIP_EDITOR"
+        override = {'window': window, 'screen': window.screen, 'area': area}
+        if not toolsHidden:
+            bpy.ops.clip.tools(override)
+        if not propsHidden:
+            bpy.ops.clip.properties(override)
+        bpy.ops.clip.view_all(override)
+        bpy.ops.clip.view_zoom_ratio(override, ratio=1)
+    
+        return{'FINISHED'}
+
+class SetCalibrationWindowToView3D(bpy.types.Operator):
+    bl_idname = "object.set_calib_window_to_view3d"
+    bl_label = "3D view"
+    bl_description = ""
+    
+    def execute(self, context):
+        windows = bpy.context.window_manager.windows
+        if len(windows) > 2:
+            self.report({'ERROR'}, "Expected two windows. Found " + str(len(windows)))
+            return{'CANCELLED'}
+        
+        #operate on the window with one area
+        window = None
+        for w in windows:
+            areas = w.screen.areas
+            if len(areas) == 1:
+                window = w
+                break
+        
+        if not window:
+            self.report({'ERROR'}, "Could not find single area window.")
+            return{'CANCELLED'}
+        
+        area = window.screen.areas[0]
+        
+        toolsHidden = False
+        propsHidden = False
+        
+        for i in area.regions:
+            print(i.type, i.width, i.height)
+            if i.type == 'TOOLS' and i.width <= 1:
+                toolsHidden = True
+            elif i.type == 'TOOL_PROPS' and i.width <= 1:
+                propsHidden = True
+
+        area.type = "VIEW_3D"
+
+        override = {'window': window, 'screen': window.screen, 'area': area}
+
+        if not toolsHidden:
+            bpy.ops.view3d.toolshelf(override)
+        if not propsHidden:
+            bpy.ops.view3d.properties(override)
+
+        s3d = area.spaces.active
+        s3d.region_3d.view_camera_offset[0] = 0.0
+        s3d.region_3d.view_camera_offset[1] = 0.0
+
+        bpy.ops.view3d.zoom_camera_1_to_1(override)
+
+        return{'FINISHED'}
+
+'''
+CAMERA CALIBRATION STUFF
 '''
 
 class PhotoModelingToolsPanel(bpy.types.Panel):    
@@ -485,23 +616,6 @@ class SetLineOfSightScalePivot(bpy.types.Operator):
         
         return{'FINISHED'}
         
-
-class MakeEdgeXAxis(bpy.types.Operator):
-    bl_idname = "object.make_edge_x"    
-    bl_label = "Make selected edge x axis"
-    bl_description = "Align the scene so the selected edge coincides with the x axis"
-    
-    def execute(self, context):
-        pass
-
-class MakeEdgeUpAxis(bpy.types.Operator):
-    bl_idname = "object.make_edge_up"    
-    bl_label = "Make selected edge up axis"
-    bl_description = "Align the scene so the selected edge coincides with the y axis"
-    
-    def execute(self, context):
-        pass
-
 class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
     bl_idname = "object.project_bg_onto_mesh"    
     bl_label = "Project background image onto mesh"
@@ -1789,10 +1903,10 @@ class CameraCalibrationOperator(bpy.types.Operator):
             if scn.optical_center_type == 'camdata':
                 #get the principal point location from camera data
                 P = [x for x in  activeSpace.clip.tracking.camera.principal]
-                print("camera data optical center", P[:])
+                #print("camera data optical center", P[:])
                 P[0] /= imageWidth
                 P[1] /= imageHeight
-                print("normlz. optical center", P[:])
+                #print("normlz. optical center", P[:])
                 P = self.relImgCoords2ImgPlaneCoords(P, imageWidth, imageHeight)
             elif scn.optical_center_type == 'compute':
                 if len(vpLineSets) < 3:
