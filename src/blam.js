@@ -4,9 +4,11 @@
  *      lolz.com/?img=rofl.com&blblaimg.png&npts=2&horiz=0&vp1x=0.33&vp21y=0.24&...&horizx=0.5&horizy=0.4
  * - save params as a cookie
  * - limit float precision in query string
- 
-
- 
+ *
+ *
+ * test:
+ * - 4x4 matrix inverse
+ * - projection matrix
  */
 
 //ids for dynamic text elements
@@ -89,7 +91,8 @@ var PARAM_PRINCIPAL_X = "principalx";
 var PARAM_PRINCIPAL_Y = "principaly";
 
 var DEFAULT_STATE_QUERY_STRING =
-"nvp=1&hstartx=0.07064765348896995&hstarty=0.6594830707960123&hendx=0.8727585863977095&hendy=0.6592779587049186&preset=0&sensorw=36&sensorh=24&vlx1startx=0.7233477088948785&vlx1starty=0.34374722970949384&vlx1endx=0.4334775766642072&vlx1endy=0.036275652596892805&vlx2startx=0.23675727210338274&vlx2starty=0.7317300285559857&vlx2endx=0.5164880454054931&vlx2endy=0.8748507371700606&vly1startx=0.49564463906230743&vly1starty=0.04225672585462735&vly1endx=0.25520158223251077&vly1endy=0.32984649130726973&vly2startx=0.7352133883758031&vly2starty=0.7245420231157701&vly2endx=0.44814967560232144&vly2endy=0.8723733049961717&vlz1startx=0.25957836207756724&vlz1starty=0.7912823007673254&vlz1endx=0.2918740340146725&vlz1endy=0.24388163777628594&vlz2startx=0.6695117999548136&vlz2starty=0.22641578288706898&vlz2endx=0.6921403652570008&vlz2endy=0.8033319447839186&originx=0.459505893853026&originy=0.5962724073192436&imageurl=webcube.png&henabled=0&principalx=0.5028573128555447&principaly=0.521936657940252";
+"nvp=1&hstartx=0.07064765348896995&hstarty=0.659484&hendx=0.8727585863977095&hendy=0.6592779587049186&preset=0&sensorw=36&sensorh=24&vlx1startx=0.7233477088948785&vlx1starty=0.34374722970949384&vlx1endx=0.4334775766642072&vlx1endy=0.036275652596892805&vlx2startx=0.23675727210338274&vlx2starty=0.7317300285559857&vlx2endx=0.5164880454054931&vlx2endy=0.8748507371700606&vly1startx=0.49564463906230743&vly1starty=0.04225672585462735&vly1endx=0.25520158223251077&vly1endy=0.32984649130726973&vly2startx=0.7352133883758031&vly2starty=0.7245420231157701&vly2endx=0.44814967560232144&vly2endy=0.8723733049961717&vlz1startx=0.25957836207756724&vlz1starty=0.7912823007673254&vlz1endx=0.2918740340146725&vlz1endy=0.24388163777628594&vlz2startx=0.6695117999548136&vlz2starty=0.22641578288706898&vlz2endx=0.6921403652570008&vlz2endy=0.8033319447839186&originx=0.459505893853026&originy=0.5962724073192436&imageurl=webcube.png&henabled=0&principalx=0.5028573128555447&principaly=0.521936657940252";
+
 //a dictionary defining the state of the app.
 //used for loading and saving.
 var appState =
@@ -171,8 +174,22 @@ var vanishingPoints = [[0, 0], [0, 0], [0, 0]];
 //various constants
 var SELECTION_RADIUS = 8;
 
+function assert(condition)
+{
+    if (!condition && window.debug)
+    {
+        console.log("ASSERTION FAILED");
+    }
+}
+
+/**************************************************************************************
+ *                               MATH UTILITY FUNCTIONS
+ **************************************************************************************/
+
 /**
- *
+ * Returns the length of a vector.
+ * @param vec The vector (in the form of an array)
+ * @return The length of the vector \c vec.
  */
 function length(vec)
 {
@@ -187,30 +204,38 @@ function length(vec)
 }
 
 /**
- *
+ * Returns a unit vector in a given direction.
+ * @param vec The direction.
+ * @return A unit vector in the direction of \c vec.
  */
 function normalize(vec)
 {
     var l = length(vec);
+    var result = zeroVector(vec.length);
     
     if (l == 0.0)
     {
-        return;
+        return result;
     }
     
     for (var i = 0; i < vec.length; i++)
     {
-        vec[i] /= l;
+        result[i] = vec[i] / l;
     }
     
-    return vec;
+    return result;
 }
 
 /**
- *
+ * Computes the dot product of two vectors.
+ * @param v1 The first vector.
+ * @param v2 The second vector.
+ * @return The dot product of \c v1 and \c v2.
  */
 function dot(v1, v2)
 {
+    assert(v1.length == v2.length);
+    
     var ret = 0.0;
     
     for (var i = 0; i < v1.length; i++)
@@ -221,22 +246,242 @@ function dot(v1, v2)
     return ret;
 }
 
+/**
+ * Computes the difference between two vectors.
+ * @param v1 The first vector.
+ * @param v2 The second vector.
+ * @return The difference \c v1 - \c v2.
+ */
 function vecSubtract(v1, v2)
 {
-    //console.log("subtr: v1 = " + v1 + ", v2 = " + v2);
-    return [v1[0] - v2[0], v1[1] - v2[1]];
-}
-
-function truncateFloat(f)
-{
-    var i = parseInt(f * 1000);
-    return i * 0.001;
+    assert(v1.length == v2.length);
+    var result = zeroVector(v1.length);
+    
+    for (var i = 0; i < v1.length; i++)
+    {
+        result[i] = v1[i] - v2[i];
+    }
+    
+    return result;
 }
 
 /**
+ * Row major projection matrix
+ */
+function computeProjectionMatrix(params)
+{
+    var result = new Array(16);
+    for (var i = 0; i < 16; i++)
+    {
+        result[i] = 0.0;
+    }
+    
+    var toRadians = (Math.PI / 360.0);
+    var h = tanf(params[0] * toRadians); //fov in degrees
+    var w = params[1] * h; //aspect ratio
+    var near = params[2]; //near
+    var far = params[3]; //far
+    var d = far - near;
+    
+    if (d <= 0.0)
+    {
+        assert(false);
+    }
+    
+    //row-major
+    result[0] = 1.0 / w;
+    result[5] = 1.0 / h;
+    result[10] = -(near + far) / d;
+    result[11] = -2.0 * near * far / d;
+    result[14] = -1.0;
+    
+    return result;
+}
+
+function zeroVector(n)
+{
+    var result = new Array(n);
+    
+    for (var i = 0; i < n; i++)
+    {
+        result[i] = 0.0;
+    }
+    
+    return result;
+}
+
+function identityMatrix(n)
+{
+    var m = zeroVector(n * n);
+    
+    for (var i = 0; i < n; i++)
+    {
+        m[n * i + i] = 1.0;
+    }
+    
+    return m;
+}
+
+/**
+ *
+ */
+function matrixToQuat(m)
+{
+    var qw = Math.sqrt(1 + m[0][0] + m[1][1] + m[2][2]) / 2.0;
+    var qx = (m[2][1] - m[1][2]) / (4 * qw);
+    var qy = (m[0][2] - m[2][0]) / (4 * qw);
+    var qz = (m[1][0] - m[0][1]) / (4 * qw);
+    
+    return [qw, qx, qy, qz];
+}
+
+/**
+ *
+ */
+function matrixToAxisAngle(m)
+{
+    var angle = Math.acos((m[0][0] + m[1][1] + m[2][2] - 1) / 2);
+    var den = Math.sqrt((m[2][1] - m[1][2]) * (m[2][1] - m[1][2]) + (m[0][2] - m[2][0]) * (m[0][2] - m[2][0]) + (m[1][0] - m[0][1]) * (m[1][0] - m[0][1]));
+    x = (m[2][1] - m[1][2]) / den;
+    y = (m[0][2] - m[2][0]) / den;
+    z = (m[1][0] - m[0][1]) / den;
+    
+    return [x, y, z, angle];
+}
+
+/**
+ *
+ */
+function multiply4x4Matrix(left, right)
+{
+    var result = new Array(16);
+    
+    for (var r = 0; r < 4; r++)
+    {
+        for (var c = 0; c < 4; c++)
+        {
+            var rc = 0.0;
+            for (var i = 0; i < 4; i++)
+            {
+                rc += left[r * 4 + i] * right[c + 4 * i];
+            }
+            
+            result[r * 4 + c] = rc;
+        }
+    }
+    
+    return result;
+}
+
+/**
+ *
+ */
+function invert4x4Matrix(m)
+{
+    var tmp = new Array(16);
+    var matrix = new Array(16);
+    
+    //calculate pairs for first 8 elements (cofactors)
+    tmp[0] = m[10]*m[15];
+    tmp[1] = m[11]*m[14];
+    tmp[2] = m[9]*m[15];
+    tmp[3] = m[11]*m[13];
+    tmp[4] = m[9]*m[14];
+    tmp[5] = m[10]*m[13];
+    tmp[6] = m[8]*m[15];
+    tmp[7] = m[11]*m[12];
+    tmp[8] = m[8]*m[14];
+    tmp[9] = m[10]*m[12];
+    tmp[10] = m[8]*m[13];
+    tmp[11] = m[9]*m[12];
+    
+    //calculate first 8 elements (cofactors)
+    matrix[0] = tmp[0]*m[5] + tmp[3]*m[6] + tmp[4]*m[7];
+    matrix[0] -= tmp[1]*m[5] + tmp[2]*m[6] + tmp[5]*m[7];
+    matrix[1] = tmp[1]*m[4] + tmp[6]*m[6] + tmp[9]*m[7];
+    matrix[1] -= tmp[0]*m[4] + tmp[7]*m[6] + tmp[8]*m[7];
+    matrix[2] = tmp[2]*m[4] + tmp[7]*m[5] + tmp[10]*m[7];
+    matrix[2] -= tmp[3]*m[4] + tmp[6]*m[5] + tmp[11]*m[7];
+    matrix[3] = tmp[5]*m[4] + tmp[8]*m[5] + tmp[11]*m[6];
+    matrix[3] -= tmp[4]*m[4] + tmp[9]*m[5] + tmp[10]*m[6];
+    matrix[4] = tmp[1]*m[1] + tmp[2]*m[2] + tmp[5]*m[3];
+    matrix[4] -= tmp[0]*m[1] + tmp[3]*m[2] + tmp[4]*m[3];
+    matrix[5] = tmp[0]*m[0] + tmp[7]*m[2] + tmp[8]*m[3];
+    matrix[5] -= tmp[1]*m[0] + tmp[6]*m[2] + tmp[9]*m[3];
+    matrix[6] = tmp[3]*m[0] + tmp[6]*m[1] + tmp[11]*m[3];
+    matrix[6] -= tmp[2]*m[0] + tmp[7]*m[1] + tmp[10]*m[3];
+    matrix[7] = tmp[4]*m[0] + tmp[9]*m[1] + tmp[10]*m[2];
+    matrix[7] -= tmp[5]*m[0] + tmp[8]*m[1] + tmp[11]*m[2];
+    
+    //calculate pairs for second 8 elements (cofactors)
+    tmp[0] = m[2]*m[7];
+    tmp[1] = m[3]*m[6];
+    tmp[2] = m[1]*m[7];
+    tmp[3] = m[3]*m[5];
+    tmp[4] = m[1]*m[6];
+    tmp[5] = m[2]*m[5];
+    tmp[6] = m[0]*m[7];
+    tmp[7] = m[3]*m[4];
+    tmp[8] = m[0]*m[6];
+    tmp[9] = m[2]*m[4];
+    tmp[10] = m[0]*m[5];
+    tmp[11] = m[1]*m[4];
+    
+    //calculate second 8 elements (cofactors)
+    matrix[8] = tmp[0]*m[13] + tmp[3]*m[14] + tmp[4]*m[15];
+    matrix[8] -= tmp[1]*m[13] + tmp[2]*m[14] + tmp[5]*m[15];
+    matrix[9] = tmp[1]*m[12] + tmp[6]*m[14] + tmp[9]*m[15];
+    matrix[9] -= tmp[0]*m[12] + tmp[7]*m[14] + tmp[8]*m[15];
+    matrix[10] = tmp[2]*m[12] + tmp[7]*m[13] + tmp[10]*m[15];
+    matrix[10] -= tmp[3]*m[12] + tmp[6]*m[13] + tmp[11]*m[15];
+    matrix[11] = tmp[5]*m[12] + tmp[8]*m[13] + tmp[11]*m[14];
+    matrix[11] -= tmp[4]*m[12] + tmp[9]*m[13] + tmp[10]*m[14];
+    matrix[12] = tmp[2]*m[10] + tmp[5]*m[11] + tmp[1]*m[9];
+    matrix[12] -= tmp[4]*m[11] + tmp[0]*m[9] + tmp[3]*m[10];
+    matrix[13] = tmp[8]*m[11] + tmp[0]*m[8] + tmp[7]*m[10];
+    matrix[13] -= tmp[6]*m[10] + tmp[9]*m[11] + tmp[1]*m[8];
+    matrix[14] = tmp[6]*m[9] + tmp[11]*m[11] + tmp[3]*m[8];
+    matrix[14] -= tmp[10]*m[11] + tmp[2]*m[8] + tmp[7]*m[9];
+    matrix[15] = tmp[10]*m[10] + tmp[4]*m[8] + tmp[9]*m[9];
+    matrix[15] -= tmp[8]*m[9] + tmp[11]*m[10] + tmp[5]*m[8];
+    
+    //calculate determinant
+    var det = m[0]*matrix[0] + m[1]*matrix[1] + m[2]*matrix[2] + m[3]*matrix[3];
+    
+    //matrix is singular?
+    if (det == 0.0)
+    {
+        //assert(0 && "singular matrix");
+    }
+    
+    //divide out the determinant
+    det = 1.0 / det;
+    for (var i = 0; i < 16; ++i)
+    {
+        matrix[i] *= det;
+    }
+    
+    
+    //copy the result back to m, transposed
+    for (var j = 0; j < 4; ++j)
+    {
+        for (var i = 0; i < 4; ++i)
+        {
+            tmp[(i << 2) + j] = matrix[(j << 2) + i];
+        }
+    }
+    
+    return tmp;
+}
+
+/**************************************************************************************
+ *                         CALIBRATION HELPER FUNCTIONS
+ **************************************************************************************/
+
+/**
  * Computes the coordinates of the second vanishing point
- * based on the first, a focal length, the center of projection and 
- * the desired horizon tilt angle. The equations here are derived from 
+ * based on the first, a focal length, the center of projection and
+ * the desired horizon tilt angle. The equations here are derived from
  * section 3.2 "Determining the focal length from a single image".
  * @param Fu the first vanishing point in normalized image coordinates.
  * @param f the relative focal length.
@@ -253,7 +498,7 @@ function computeSecondVanishingPoint(Fu, f, P, horizonDir)
     //        these lines won't work, but this case should be handled somehow.
     var k = -(Fu[0] * Fu[0] + Fu[1] * Fu[1] + f * f) / (Fu[0] * horizonDir[0] + Fu[1] * horizonDir[1]);
     var Fv = [Fu[0] + k * horizonDir[0], Fu[1] + k * horizonDir[1]];
-
+    
     return Fv
 }
 
@@ -267,33 +512,33 @@ function computeSecondVanishingPoint(Fu, f, P, horizonDir)
  */
 function computeFocalLength(Fu, Fv, P)
 {
-
+    
     //compute Puv, the orthogonal projection of P onto FuFv
     /*
-    var dirFuFv = normalize([x - y for x, y in zip(Fu, Fv)])
-    var FvP = [x - y for x, y in zip(P, Fv)]
-    var proj = dot(dirFuFv, FvP)
-    var Puv = [proj * x + y for x, y in zip(dirFuFv, Fv)]
-
-    var PPuv = length([x - y for x, y in zip(P, Puv)])
-
-    var FvPuv = length([x - y for x, y in zip(Fv, Puv)])
-    var FuPuv = length([x - y for x, y in zip(Fu, Puv)])
-    var FuFv = length([x - y for x, y in zip(Fu, Fv)])*/
+     var dirFuFv = normalize([x - y for x, y in zip(Fu, Fv)])
+     var FvP = [x - y for x, y in zip(P, Fv)]
+     var proj = dot(dirFuFv, FvP)
+     var Puv = [proj * x + y for x, y in zip(dirFuFv, Fv)]
+     
+     var PPuv = length([x - y for x, y in zip(P, Puv)])
+     
+     var FvPuv = length([x - y for x, y in zip(Fv, Puv)])
+     var FuPuv = length([x - y for x, y in zip(Fu, Puv)])
+     var FuFv = length([x - y for x, y in zip(Fu, Fv)])*/
     //print("FuFv", FuFv, "FvPuv + FuPuv", FvPuv + FuPuv)
-   
+    
     var dirFuFv = normalize(vecSubtract(Fu, Fv));
     var FvP = vecSubtract(P, Fv);
     var proj = dot(dirFuFv, FvP);
     var Puv = [proj * dirFuFv[0] + Fv[0], proj * dirFuFv[1] + Fv[1]];
-
+    
     var PPuv = length(vecSubtract(P, Puv));
-
+    
     var FvPuv = length(vecSubtract(Fv, Puv));
     var FuPuv = length(vecSubtract(Fu, Puv));
     var FuFv = length(vecSubtract(Fu, Fv));
     
-
+    
     var fSq = FvPuv * FuPuv - PPuv * PPuv
     //print("FuPuv", FuPuv, "FvPuv", FvPuv, "PPuv", PPuv, "OPuv", FvPuv * FuPuv)
     //print("fSq = ", fSq, " = ", FvPuv * FuPuv, " - ", PPuv * PPuv)
@@ -304,31 +549,34 @@ function computeFocalLength(Fu, Fv, P)
     
     var f = Math.sqrt(fSq);
     //print("dot 1:", dot(normalize(Fu + [f]), normalize(Fv + [f])))
-
+    
     return f
 }
 
 /**
- *
+ * Computes the ortocenter of a triangle given its three corners.
+ * @param verts The triangle corners.
+ * @return The orthocenter coordinates.
+ * @see http://www.mathopenref.com/triangleorthocenter.html
  */
 function computeTriangleOrthocenter(verts)
 {
-    //print("verts", verts)
-    //assert(len(verts) == 3)
-
+    assert(verts.length == 3);
+    assert(verts[0].length == 2);
+    assert(verts[1].length == 2);
+    assert(verts[2].length == 2);
+    
     A = verts[0];
     B = verts[1];
     C = verts[2];
-
-    //print("A, B, C", A, B, C)
-
+    
     a = A[0];
     b = A[1];
     c = B[0];
     d = B[1];
     e = C[0];
     f = C[1];
-
+    
     N = b * c+ d * e + f * a - c * f - b * e - a * d;
     x = ((d-f) * b * b + (f-b) * d * d + (b-d) * f * f + a * b * (c-e) + c * d * (e-a) + e * f * (a-c) ) / N;
     y = ((e-c) * a * a + (a-e) * c * c + (c-a) * e * e + a * b * (f-d) + c * d * (b-f) + e * f * (d-b) ) / N;
@@ -337,7 +585,7 @@ function computeTriangleOrthocenter(verts)
 }
 
 /**
- * Computes the camera rotation matrix based on two vanishing points 
+ * Computes the camera rotation matrix based on two vanishing points
  * and a focal length as in section 3.3 "Computing the rotation matrix".
  * @param Fu the first vanishing point in normalized image coordinates.
  * @param Fv the second vanishing point in normalized image coordinates.
@@ -346,50 +594,50 @@ function computeTriangleOrthocenter(verts)
  */
 function computeCameraRotationMatrix(Fu, Fv, f, P)
 {
-
+    
     Fu[0] -= P[0];
     Fu[1] -= P[1];
-
+    
     Fv[0] -= P[0];
     Fv[1] -= P[1];
-
+    
     var OFu = [Fu[0], Fu[1], f];
     var OFv = [Fv[0], Fv[1], f];
-
+    
     //print("matrix dot", dot(OFu, OFv))
-
+    
     var s1 = length(OFu);
     var upRc = normalize(OFu);
-
+    
     var s2 = length(OFv);
     var vpRc = normalize(OFv);
-
-    var wpRc = [upRc[1] * vpRc[2] - upRc[2] * vpRc[1], 
-                upRc[2] * vpRc[0] - upRc[0] * vpRc[2], 
-                upRc[0] * vpRc[1] - upRc[1] * vpRc[0]]; 
-
+    
+    var wpRc = [upRc[1] * vpRc[2] - upRc[2] * vpRc[1],
+                upRc[2] * vpRc[0] - upRc[0] * vpRc[2],
+                upRc[0] * vpRc[1] - upRc[1] * vpRc[0]];
+    
     var M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     
     M[0][0] = Fu[0] / s1;
     M[0][1] = Fv[0] / s2;
     M[0][2] = wpRc[0];
-
+    
     M[1][0] = Fu[1] / s1;
     M[1][1] = Fv[1] / s2;
     M[1][2] = wpRc[1];
-
+    
     M[2][0] = f / s1;
     M[2][1] = f / s2;
     M[2][2] = wpRc[2];
-
-
+    
+    
     return M
 }
 
 /**
- * 
+ * Computes
  */
-function computeVanishingPoint(segment1, segment2)
+function computeIntersectionPoint(segment1, segment2)
 {
     var x1 = segment1[0][0];
     var y1 = segment1[0][1];
@@ -399,7 +647,7 @@ function computeVanishingPoint(segment1, segment2)
     
     var x3 = segment2[0][0];
     var y3 = segment2[0][1];
-  
+    
     var x4 = segment2[1][0];
     var y4 = segment2[1][1];
     
@@ -414,155 +662,166 @@ function computeVanishingPoint(segment1, segment2)
     return [x, y];
 }
 
+
+/**************************************************************************************
+ *                             CALIBRATION RESULT CLASS
+ **************************************************************************************/
+function CalibrationResult()
+{
+    /** 
+     * Indicates if the result is defined (might not be due to
+     * invalid vanishing point constellations etc).
+     */
+    this.resultIsDefined = false;
+    /** Set if the result is not defined. */
+    this.errorMessage = null;
+    /** The focal length in image plane coordinates.*/
+    this.focalLengthImagePlaneCoords = 0;
+    /** The two vanishing points used to compute the result. */
+    this.vanishingPoints = zeroVector(2);
+    /** The camera orientation as a 3x3 matrix. */
+    this.orientationMatrix = identityMatrix(3);
+    /** The camera orientation as a unit quaternion. */
+    this.orientationQuaternion = zeroVector(4);
+    /** The camera orientation on axis angle form. */
+    this.orientationAxisAngle = zeroVector(4);
+    /** The camera 3D translation.*/
+    this.translation = zeroVector(3);
+    /** */
+    this.modelViewMatrix = identityMatrix(4);
+    /** */
+    this.projectionMatrix = identityMatrix(4);
+    /** */
+    this.principalPoint = zeroVector(2);
+    /** */
+    this.aspectRatio = 1.0;
+}
+
+/**
+ * 
+ */
+CalibrationResult.prototype.calibrate1VP = function calibrate1VP(vanishingPoint1,
+                                                                 aspectRatio,
+                                                                 opticalCenter,
+                                                                 origin,
+                                                                 focalLength,
+                                                                 horizonDirection)
+{
+    //use the horizon direction and focal length to compute two additional vanishing points
+    var Fu = vanishingPoint1;
+    var Fv = computeSecondVanishingPoint(Fu, focalLength, opticalCenter, horizonDirection);
+    
+    this.calibrate2VP(Fu, Fv, aspectRatio, opticalCenter, origin);
+    
+}
+
+/**
+ *
+ */
+CalibrationResult.prototype.calibrate2VP = function calibrate2VP(vanishingPoint1,
+                                                                 vanishingPoint2,
+                                                                 aspectRatio,
+                                                                 opticalCenter,
+                                                                 origin)
+{
+    //compute the third vanishing point
+    var Fu = vanishingPoint1;
+    var Fv = vanishingPoint2;
+    
+    this.focalLengthImagePlaneCoords = computeFocalLength(Fu, Fv, opticalCenter);
+    
+    this.vanishingPoints[0] = Fu;
+    this.vanishingPoints[1] = Fv;
+    this.principalPoint = opticalCenter;
+    this.orientationMatrix = computeCameraRotationMatrix(Fu,
+                                                         Fv,
+                                                         this.focalLengthImagePlaneCoords,
+                                                         this.principalPoint);
+    this.orientationQuaternion = matrixToQuat(this.orientationMatrix);
+    this.orientationAxisAngle = matrixToAxisAngle(this.orientationMatrix);
+    this.aspectRatio = aspectRatio;
+}
+
+/**
+ *
+ */
+CalibrationResult.prototype.calibrate3VP = function calibrate3VP(vanishingPoint1,
+                                                                 vanishingPoint2,
+                                                                 vanishingPoint3,
+                                                                 aspectRatio,
+                                                                 origin)
+{
+    //compute the optical center from the three vanishing points
+    var opticalCenter = computeTriangleOrthocenter([vanishingPoint1, vanishingPoint2, vanishingPoint3]);
+    this.calibrate2VP(vanishingPoint1, vanishingPoint2, aspectRatio, opticalCenter, origin);
+}
+
+/**************************************************************************************
+ *                             
+ **************************************************************************************/
 function computeCameraParameters()
 {
+    //get image dimensions and aspect ratio
+    var imageWidth = window.currentImage.naturalWidth;
+    var imageHeight = window.currentImage.naturalHeight;
+    var aspectRatio = imageWidth / imageHeight;
+    
+    //gather vanishing points in image plane coordinates
+    var vpsImPlCoords = new Array(3);
+    for (var i = 0; i < 3; i++)
+    {
+        var s1 = [controlPoints[4 * i], controlPoints[4 * i + 1]];
+        var s2 = [controlPoints[4 * i + 2], controlPoints[4 * i + 3]];
+        vanishingPoints[i] = computeIntersectionPoint(s1, s2);
+        vpsImPlCoords[i] = relImageToImagePlane(vanishingPoints[i], aspectRatio);
+    }
+    
+    //perform calibration.
+    if (window.numVanishingPoints == 1)
+    {
+        var horizonDirection = [1.0, 0.0];
         
-        /*def gatherGreasePencilSegments(self):
-        '''Collects and returns line segments in normalized image coordinates
-        from the first two grease pencil layers.
-        \return A list of line segment sets. [i][j][k][l] is coordinate l of point k 
-        in segment j from layer i. 
-        '''*/
-    
-        var imageWidth = window.currentImage.naturalWidth;
-        var imageHeight = window.currentImage.naturalHeight;
-    
-        var vpsImPlCoords = [null, null, null];
-        for (var i = 0; i < 3; i++)
+        if (window.useHorizon)
         {
-            var s1 = [controlPoints[4 * i], controlPoints[4 * i + 1]];
-            var s2 = [controlPoints[4 * i + 2], controlPoints[4 * i + 3]];
-            vanishingPoints[i] = computeVanishingPoint(s1, s2);
-            vpsImPlCoords[i] = relImageToImagePlane(vanishingPoints[i], imageWidth, imageHeight);
+            horizonDirection[0] = controlPoints[CP_HORIZ_END][0] - controlPoints[CP_HORIZ_START][0];
+            horizonDirection[1] = controlPoints[CP_HORIZ_END][1] - controlPoints[CP_HORIZ_START][1];
+            horizonDirection = relImageToImagePlane(horizonDirection, aspectRatio);
+            horizonDirection = normalize(horizonDirection);
         }
+        
+        var f = 2.6; //TODO
+        
+        window.calibrationResult.calibrate1VP(relImageToImagePlane(vanishingPoints[0], aspectRatio),
+                                              aspectRatio,
+                                              relImageToImagePlane(controlPoints[CP_PRINCIPAL], aspectRatio),
+                                              relImageToImagePlane(controlPoints[CP_ORIGIN], aspectRatio),
+                                              f,
+                                              horizonDirection);
+    }
+    else if (window.numVanishingPoints == 2)
+    {
+        window.calibrationResult.calibrate2VP(vanishingPoints[0],
+                                              vanishingPoints[1],
+                                              aspectRatio,
+                                              controlPoints[CP_PRINCIPAL],
+                                              controlPoints[CP_ORIGIN]);
+    }
+    else
+    {
+        window.calibrationResult.calibrate3VP(vanishingPoints[0],
+                                              vanishingPoints[1],
+                                              vanishingPoints[2],
+                                              aspectRatio,
+                                              controlPoints[CP_ORIGIN]);
+    }
     
-        window.computedPrincipalPoint =  imagePlaneToRelImage(computeTriangleOrthocenter(vpsImPlCoords), imageWidth, imageHeight);
-        //console.log("window.computedPrincipalPoint " + window.computedPrincipalPoint + ", ipl " + computeTriangleOrthocenter(vpsImPlCoords));
+    
+    //
+    setMatrixLabel(ID_MATRIX_LABEL, window.calibrationResult.orientationMatrix);
+    setVectorLabel(ID_AXIS_ANGLE_LABEL, window.calibrationResult.orientationAxisAngle);
+    setVectorLabel(ID_QUAT_LABEL, window.calibrationResult.orientationQuaternion);
 
-        //principal point in image plane coordinates
-        var P = window.numVanishingPoints == 3 ? window.computedPrincipalPoint : controlPoints[CP_PRINCIPAL];
-        
-        if (window.numVanishingPoints == 1)
-        {
-            //calibration using a single vanishing point
-            var imgAspect = imageWidth / imageHeight; //TODO: float div?
-            
-            //compute the horizon direction
-            var horizDir = [1.0, 0.0];
-            if (window.useHorizon)
-            {
-                var xHorizDir = imgAspect * (controlPoints[CP_HORIZ_END][0] - controlPoints[CP_HORIZ_START][0]);
-                var yHorizDir = controlPoints[CP_HORIZ_END][1] - controlPoints[CP_HORIZ_START][1];
-                horizDir = normalize([-xHorizDir, -yHorizDir])
-            }
-            //print("horizDir", horizDir)
-            
-            //compute the vanishing point location
-            var vp1 = vanishingPoints[0];
-            
-            //get the current relative focal length
-            /*vfAbs = activeSpace.clip.tracking.camera.focal_length
-            sensorWidth = activeSpace.clip.tracking.camera.sensor_width
-            
-            f = fAbs / sensorWidth * imgAspect
-            //print("fAbs", fAbs, "f rel", f)
-             */
-            var f = 0.7;
-            Fu = relImageToImagePlane(vp1, imageWidth, imageHeight);
-            Fv = computeSecondVanishingPoint(Fu, f, P, horizDir);
-        }
-        else
-        {
-            
-            
-            
-            //calibration using two vanishing points
-            /*
-            if scn.optical_center_type == 'camdata':
-                #get the principal point location from camera data
-                P = [x for x in  activeSpace.clip.tracking.camera.principal]
-                #print("camera data optical center", P[:])
-                P[0] /= imageWidth
-                P[1] /= imageHeight
-                #print("normlz. optical center", P[:])
-                P = self.relImageToImagePlane(P, imageWidth, imageHeight)
-            elif scn.optical_center_type == 'compute':
-                if len(vpLineSets) < 3:
-                    self.report({'ERROR'}, "A third grease pencil layer is needed to compute the optical center.")
-                    return{'CANCELLED'}
-                #compute the principal point using a vanishing point from a third gp layer.
-                #this computation does not rely on the order of the line sets
-                vps = [self.computeIntersectionPointForLineSegments(vpLineSets[i]) for i in range(len(vpLineSets))]
-                vps = [self.relImageToImagePlane(vps[i], imageWidth, imageHeight) for i in range(len(vps))]
-                P = self.computeTriangleOrthocenter(vps)
-            else:
-                #assume optical center in image midpoint
-                pass
-            
-            #compute the two vanishing points
-            vps = [self.computeIntersectionPointForLineSegments(vpLineSets[i]) for i in range(2)]    
-        
-            #order vanishing points along the image x axis
-            if vps[1][0] < vps[0][0]:
-                vps.reverse()
-                vpLineSets.reverse()
-                vpAxisIndices.reverse()            
-             */
-            //compute focal length
-            /*
-            
-            */
-            Fu = relImageToImagePlane(vanishingPoints[0], imageWidth, imageHeight);
-            Fv = relImageToImagePlane(vanishingPoints[1], imageWidth, imageHeight);
-            
-            var f = computeFocalLength(Fu, Fv, P);
-            
-        }
-        
-        //compute camera orientation
-        console.log("Fu " + Fu + ", Fv " + Fv + ", f " + f);
-        //initial orientation based on the vanishing points and focal length
-        //M = computeCameraRotationMatrix(Fu, Fv, f, P)
-        
-        //sanity check: M should be a pure rotation matrix, 
-        //so its determinant should be 1
-        /*
-        eps = 0.00001
-        if 1.0 - M.determinant() < -eps or 1.0 - M.determinant() > eps:
-            self.report({'ERROR'}, "Non unit rotation matrix determinant: " + str(M.determinant()))    
-            #return{'CANCELLED'} **/
-        
-        /*
-        #align the camera to the coordinate axes as specified
-        M = self.alignCoordinateAxes(M, vpAxisIndices[0], vpAxisIndices[1])
-        #apply the transform to the camera
-        cam.matrix_world = M*/
-        
-        /*
-        move the camera an arbitrary distance away from the ground plane
-        TODO: focus on the origin or something
-        
-        cam.location = (0, 0, 2)*/
     
-        /*
-        #compute an absolute focal length in mm based 
-        #on the current camera settings
-        #TODO: make sure this works for all combinations of
-        #image dimensions and camera sensor settings
-        if imageWidth >= imageHeight:
-            fMm = cam.data.sensor_height * f
-        else:
-            fMm = cam.data.sensor_width * f
-        cam.data.lens = fMm
-        self.report({'INFO'}, "Camera focal length set to " + str(fMm))
-        
-        #move principal point of the blender camera
-        r = imageWidth / float(imageHeight)
-        cam.data.shift_x = -1 * P[0] / r
-        cam.data.shift_y = -1 * P[1] / r*/
-        
-        
-        
 }
 
 function checkBrowserCompatibility()
@@ -592,6 +851,45 @@ function checkBrowserCompatibility()
     
     return null;
 }
+
+function setVectorLabel(id, v)
+{
+    var text = "(";
+    var n = 5;
+    var l = v.length;
+    for (var i = 0; i < l; i++)
+    {
+        text += v[i].toFixed(n);
+        
+        if (i < l - 1)
+        {
+            text += ", ";
+        }
+    }
+    text += ")";
+    
+    $('#' + id).html(text);
+}
+
+
+function setMatrixLabel(id, m)
+{
+    var text = "";
+    var n = 5;
+    var l = m.length;
+    for (var i = 0; i < l; i++)
+    {
+        for (var j = 0; j < l; j++)
+        {
+            var pref = m[i][j] < 0 ? "" : " ";
+            text += pref + m[i][j].toFixed(n) + " ";
+        }
+        text += " <br />";
+    }
+    
+    $('#' + id).html(text);
+}
+
 
 function setLabelText(id, text)
 {
@@ -788,8 +1086,8 @@ function onMouseMove(e)
             pointName = "3D origin";
         }
         
-        var xHover = truncateFloat(controlPoints[mouseOverIdx][0]);
-        var yHover = truncateFloat(controlPoints[mouseOverIdx][1]);
+        var xHover = controlPoints[mouseOverIdx][0].toFixed(3);
+        var yHover = controlPoints[mouseOverIdx][1].toFixed(3);
         setLabelText(ID_INFO_LABEL, pointName + " (" + xHover + ", " + yHover + ")");
     }
     else
@@ -932,9 +1230,10 @@ function drawOverlay()
     }
     else
     {
+        var pp = imagePlaneToRelImage(window.calibrationResult.principalPoint, w / h);
         drawControlPoint(ctx,
-                         window.computedPrincipalPoint[0],
-                         window.computedPrincipalPoint[1],
+                         pp[0],
+                         pp[1],
                          false);
     }
     
@@ -1291,13 +1590,16 @@ function loadStateFromQueryString(qs)
  */
 function saveStateToQueryString()
 {
+    //the number of decimal places of saved control point positions
+    var n = 6;
+    
     //method
     appState[PARAM_NUM_VP] = window.numVanishingPoints;
     
-    appState[PARAM_HORIZ_START_X] = controlPoints[CP_HORIZ_START][0];
-    appState[PARAM_HORIZ_START_Y] = controlPoints[CP_HORIZ_START][1];
-    appState[PARAM_HORIZ_END_X] = controlPoints[CP_HORIZ_END][0];
-    appState[PARAM_HORIZ_END_Y] = controlPoints[CP_HORIZ_END][1];
+    appState[PARAM_HORIZ_START_X] = controlPoints[CP_HORIZ_START][0].toFixed(n);
+    appState[PARAM_HORIZ_START_Y] = controlPoints[CP_HORIZ_START][1].toFixed(n);
+    appState[PARAM_HORIZ_END_X] = controlPoints[CP_HORIZ_END][0].toFixed(n);
+    appState[PARAM_HORIZ_END_Y] = controlPoints[CP_HORIZ_END][1].toFixed(n);
     appState[PARAM_HORIZ_ENABLED] = window.useHorizon ? 0 : 1;
     
     //camera
@@ -1306,43 +1608,43 @@ function saveStateToQueryString()
     appState[PARAM_SENSOR_HEIGHT] = getSensorHeight();
     
     //vanishing point positions
-    appState[PARAM_VLX1_START_X] = controlPoints[CP_VLX1_START][0];
-    appState[PARAM_VLX1_START_Y] = controlPoints[CP_VLX1_START][1];
-    appState[PARAM_VLX1_END_X] = controlPoints[CP_VLX1_END][0];
-    appState[PARAM_VLX1_END_Y] = controlPoints[CP_VLX1_END][1];
+    appState[PARAM_VLX1_START_X] = controlPoints[CP_VLX1_START][0].toFixed(n);
+    appState[PARAM_VLX1_START_Y] = controlPoints[CP_VLX1_START][1].toFixed(n);
+    appState[PARAM_VLX1_END_X] = controlPoints[CP_VLX1_END][0].toFixed(n);
+    appState[PARAM_VLX1_END_Y] = controlPoints[CP_VLX1_END][1].toFixed(n);
     
-    appState[PARAM_VLX2_START_X] = controlPoints[CP_VLX2_START][0];
-    appState[PARAM_VLX2_START_Y] = controlPoints[CP_VLX2_START][1];
-    appState[PARAM_VLX2_END_X] = controlPoints[CP_VLX2_END][0];
-    appState[PARAM_VLX2_END_Y] = controlPoints[CP_VLX2_END][1];
+    appState[PARAM_VLX2_START_X] = controlPoints[CP_VLX2_START][0].toFixed(n);
+    appState[PARAM_VLX2_START_Y] = controlPoints[CP_VLX2_START][1].toFixed(n);
+    appState[PARAM_VLX2_END_X] = controlPoints[CP_VLX2_END][0].toFixed(n);
+    appState[PARAM_VLX2_END_Y] = controlPoints[CP_VLX2_END][1].toFixed(n);
     
-    appState[PARAM_VLY1_START_X] = controlPoints[CP_VLY1_START][0];
-    appState[PARAM_VLY1_START_Y] = controlPoints[CP_VLY1_START][1];
-    appState[PARAM_VLY1_END_X] = controlPoints[CP_VLY1_END][0];
-    appState[PARAM_VLY1_END_Y] = controlPoints[CP_VLY1_END][1];
+    appState[PARAM_VLY1_START_X] = controlPoints[CP_VLY1_START][0].toFixed(n);
+    appState[PARAM_VLY1_START_Y] = controlPoints[CP_VLY1_START][1].toFixed(n);
+    appState[PARAM_VLY1_END_X] = controlPoints[CP_VLY1_END][0].toFixed(n);
+    appState[PARAM_VLY1_END_Y] = controlPoints[CP_VLY1_END][1].toFixed(n);
     
-    appState[PARAM_VLY2_START_X] = controlPoints[CP_VLY2_START][0];
-    appState[PARAM_VLY2_START_Y] = controlPoints[CP_VLY2_START][1];
-    appState[PARAM_VLY2_END_X] = controlPoints[CP_VLY2_END][0];
-    appState[PARAM_VLY2_END_Y] = controlPoints[CP_VLY2_END][1];
+    appState[PARAM_VLY2_START_X] = controlPoints[CP_VLY2_START][0].toFixed(n);
+    appState[PARAM_VLY2_START_Y] = controlPoints[CP_VLY2_START][1].toFixed(n);
+    appState[PARAM_VLY2_END_X] = controlPoints[CP_VLY2_END][0].toFixed(n);
+    appState[PARAM_VLY2_END_Y] = controlPoints[CP_VLY2_END][1].toFixed(n);
     
-    appState[PARAM_VLZ1_START_X] = controlPoints[CP_VLZ1_START][0];
-    appState[PARAM_VLZ1_START_Y] = controlPoints[CP_VLZ1_START][1];
-    appState[PARAM_VLZ1_END_X] = controlPoints[CP_VLZ1_END][0];
-    appState[PARAM_VLZ1_END_Y] = controlPoints[CP_VLZ1_END][1];
+    appState[PARAM_VLZ1_START_X] = controlPoints[CP_VLZ1_START][0].toFixed(n);
+    appState[PARAM_VLZ1_START_Y] = controlPoints[CP_VLZ1_START][1].toFixed(n);
+    appState[PARAM_VLZ1_END_X] = controlPoints[CP_VLZ1_END][0].toFixed(n);
+    appState[PARAM_VLZ1_END_Y] = controlPoints[CP_VLZ1_END][1].toFixed(n);
     
-    appState[PARAM_VLZ2_START_X] = controlPoints[CP_VLZ2_START][0];
-    appState[PARAM_VLZ2_START_Y] = controlPoints[CP_VLZ2_START][1];
-    appState[PARAM_VLZ2_END_X] = controlPoints[CP_VLZ2_END][0];
-    appState[PARAM_VLZ2_END_Y] = controlPoints[CP_VLZ2_END][1];
+    appState[PARAM_VLZ2_START_X] = controlPoints[CP_VLZ2_START][0].toFixed(n);
+    appState[PARAM_VLZ2_START_Y] = controlPoints[CP_VLZ2_START][1].toFixed(n);
+    appState[PARAM_VLZ2_END_X] = controlPoints[CP_VLZ2_END][0].toFixed(n);
+    appState[PARAM_VLZ2_END_Y] = controlPoints[CP_VLZ2_END][1].toFixed(n);
     
     //origin
-    appState[PARAM_ORIGIN_X] = controlPoints[CP_ORIGIN][0];
-    appState[PARAM_ORIGIN_Y] = controlPoints[CP_ORIGIN][1];
+    appState[PARAM_ORIGIN_X] = controlPoints[CP_ORIGIN][0].toFixed(n);
+    appState[PARAM_ORIGIN_Y] = controlPoints[CP_ORIGIN][1].toFixed(n);
     
     //principal
-    appState[PARAM_PRINCIPAL_X] = controlPoints[CP_PRINCIPAL][0];
-    appState[PARAM_PRINCIPAL_Y] = controlPoints[CP_PRINCIPAL][1];
+    appState[PARAM_PRINCIPAL_X] = controlPoints[CP_PRINCIPAL][0].toFixed(n);
+    appState[PARAM_PRINCIPAL_Y] = controlPoints[CP_PRINCIPAL][1].toFixed(n);
     
     //image url
     appState[PARAM_IMAGE_URL] = $('#imageURL').val();
@@ -1388,16 +1690,14 @@ function relImageToCanvas(x, y)
     return [xIm, yIm];
 }
 
-function relImageToImagePlane(pt, imageWidth, imageHeight)
+function relImageToImagePlane(pt, aspectRatio)
 {
-    var ratio = imageWidth / imageHeight;
-    return [ratio * (pt[0] - 0.5), pt[1] - 0.5];
+    return [aspectRatio * (pt[0] - 0.5), pt[1] - 0.5];
 }
 
-function imagePlaneToRelImage(pt, imageWidth, imageHeight)
+function imagePlaneToRelImage(pt, aspectRatio)
 {
-    var ratio = imageWidth / imageHeight;
-    return [pt[0] / ratio + 0.5, pt[1] + 0.5];
+    return [pt[0] / aspectRatio + 0.5, pt[1] + 0.5];
 }
 
 
@@ -1418,7 +1718,6 @@ $(document).ready(function()
     //used to handle control point dragging
     window.draggedControlPoint = -1;
                   
-    window.computedPrincipalPoint = [0.5, 0.5];
     
     //store the three main components
     window.imageCanvas = $("#imageCanvas")[0];
@@ -1485,26 +1784,23 @@ $(document).ready(function()
         reset();
     });
     
+    window.calibrationResult = new CalibrationResult();
+
     createCameraPresets();
     
     loadStateFromQueryString(DEFAULT_STATE_QUERY_STRING);
+                  
     $("#splashContainer").remove();
-    draw();
     
     if (window.debug)
     {
-        //fade out splash screen immediately if we're in debug mode
-        /*$("#splashContainer").fadeTo('slow', 0, function(e)
-        {
-            
-        });*/
-        
+                  
         startLoadingImageFromURL("webcube.png");
         
         setLabelText(ID_SHARE_URL_LABEL, getShareURL());
         setLabelText(ID_CALIBRATION_INFO_LABEL, "testing info label");
         setLabelText(ID_AXIS_ANGLE_LABEL, "testing axis angle label");
-        setLabelText(ID_QUAT_LABEL, "testing quat label");
+        setVectorLabel(ID_QUAT_LABEL, [23, 3, 1, 9.343232]);
         setLabelText(ID_EULER_LABEL, "testing euler label");
         //setLabelText(ID_MATRIX_LABEL, "testing matrix label");
         setLabelText(ID_TRANSLATION_LABEL, "testing translation label");
