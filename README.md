@@ -1,6 +1,6 @@
 # What is this?
 
-This is BLAM, a camera and video projector calibration toolkit for [Blender](http://www.blender.org) in the form of an add-on, written in python, that facilitates modeling based on photographs.
+This is BLAM, a camera and [video projector calibration](https://github.com/stuffmatic/blam/wiki/Video-Projector-Calibration) toolkit for [Blender](http://www.blender.org) in the form of an add-on, written in python, that facilitates modeling based on photographs.
 
 To get development progress updates, either check back here regularly or [follow me on Twitter](http://www.twitter.com/stuffmatic).
 
