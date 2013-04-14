@@ -22,13 +22,13 @@ import math, cmath
 bl_info = { \
     'name': 'BLAM - The Blender camera calibration toolkit',
     'author': 'Per Gantelius',
-    'version': (0, 0, 4),
+    'version': (0, 0, 5),
     'blender': (2, 6, 0),
     'api': 41524,
     'location': 'Move Clip Editor > Tools Panel > Static Camera Calibration and 3D View > Tools Panel > Photo Modeling Tools',
     'description': 'Reconstruction of 3D geometry and estimation of camera orientation and focal length based on photographs.',
-    'tracker_url': 'http://code.google.com/p/blam/issues/list',
-    'wiki_url': 'http://code.google.com/p/blam/w/list',
+    'tracker_url': 'https://github.com/stuffmatic/blam/issues',
+    'wiki_url': 'https://github.com/stuffmatic/blam/wiki',
     'support': 'COMMUNITY',
     'category': '3D View'}
 
