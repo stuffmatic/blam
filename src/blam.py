@@ -17,14 +17,18 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 '''
 import bpy
 import mathutils
-import math, cmath 
+import math, cmath
+
+from bpy.props import EnumProperty,      \
+                      BoolProperty,      \
+                      PointerProperty
+
 
 bl_info = { \
     'name': 'BLAM - The Blender camera calibration toolkit',
     'author': 'Per Gantelius',
     'version': (0, 0, 5),
-    'blender': (2, 6, 0),
-    'api': 41524,
+    'blender': (2, 6, 9),
     'location': 'Move Clip Editor > Tools Panel > Static Camera Calibration and 3D View > Tools Panel > Photo Modeling Tools',
     'description': 'Reconstruction of 3D geometry and estimation of camera orientation and focal length based on photographs.',
     'tracker_url': 'https://github.com/stuffmatic/blam/issues',
@@ -115,6 +119,7 @@ class Table(list):
         return 1
     def __eq__( self, rhs ):  return (self - rhs).forall( iszero )
 
+
 class Vec(Table):
     def dot( self, otherVec ):  return reduce(operator.add, map(operator.mul, self, otherVec), 0.0)
     def norm( self ):  return math.sqrt(abs( self.dot(self.conjugate()) ))
@@ -142,6 +147,7 @@ class Vec(Table):
         degree = len(self) / 2
         num, den = self[:degree+1], self[degree+1:] + [1]
         return num.polyval(x) / den.polyval(x)
+
 
 class Matrix(Table):
     __slots__ = ['size', 'rows', 'cols']
@@ -207,6 +213,7 @@ class Matrix(Table):
         return x
     def rank( self ):  return Vec([ not row.forall(iszero) for row in self.qr(ROnly=1) ]).sum()
 
+
 class Square(Matrix):
     def lu( self ):
         'Factor a square matrix into lower and upper triangular form such that L.mmul(U)==A'
@@ -253,9 +260,11 @@ class Square(Matrix):
         assert NPOST or iszero( origTrace - eigvals.sum() )
         return Vec(eigvals)
 
+
 class Triangular(Square):
     def eigs( self ):  return self.diag()
     def det( self ):  return self.diag().prod()
+
 
 class UpperTri(Triangular):
     def _solve( self, b ):
@@ -266,6 +275,7 @@ class UpperTri(Triangular):
             x.insert(0, (b[i] - x.dot(self[i][i+1:])) / self[i][i] )
         return x
 
+
 class LowerTri(Triangular):
     def _solve( self, b ):
         'Solve a lower triangular matrix using forward substitution'
@@ -274,6 +284,7 @@ class LowerTri(Triangular):
             assert NPRE or self[i][i], 'Forward sub requires non-zero elements on the diagonal'
             x.append( (b[i] - x.dot(self[i][:i])) / self[i][i] )
         return x
+
 
 def Mat( elems ):
     'Factory function to create a new matrix.'
@@ -303,37 +314,46 @@ def funToVec( tgtfun, low=-1, high=1, steps=40, EqualSpacing=0 ):
     yvec = map(tgtfun, xvec)
     return Mat( [xvec, yvec] )
 
+
 def funfit(xvec, yvec, basisfuns ):
     'Solves design matrix for approximating to basis functions'
     return Mat([ map(form,xvec) for form in basisfuns ]).tr().solve(Vec(yvec))
+
 
 def polyfit(xvec, yvec, degree=2 ):
     'Solves Vandermonde design matrix for approximating polynomial coefficients'
     return Mat([ [x**n for n in range(degree,-1,-1)] for x in xvec ]).solve(Vec(yvec))
 
+
 def ratfit(xvec, yvec, degree=2 ):
     'Solves design matrix for approximating rational polynomial coefficients (a*x**2 + b*x + c)/(d*x**2 + e*x + 1)'
     return Mat([[x**n for n in range(degree,-1,-1)]+[-y*x**n for n in range(degree,0,-1)] for x,y in zip(xvec,yvec)]).solve(Vec(yvec))
+
 
 def genmat(m, n, func):
     if not n: n=m
     return Mat([ [func(i,j) for i in range(n)] for j in range(m) ])
 
+
 def zeroes(m=1, n=None):
     'Zero matrix with side length m-by-m or m-by-n.'
     return genmat(m,n, lambda i,j: 0)
+
 
 def eye(m=1, n=None):
     'Identity matrix with side length m-by-m or m-by-n'
     return genmat(m,n, lambda i,j: int(i==j))
 
+
 def hilb(m=1, n=None):
     'Hilbert matrix with side length m-by-m or m-by-n.  Elem[i][j]=1/(i+j+1)'
     return genmat(m,n, lambda i,j: 1.0/(i+j+1.0))
 
+
 def rand(m=1, n=None):
     'Random matrix with side length m-by-m or m-by-n'
     return genmat(m,n, lambda i,j: random.random())
+
 
 '''
 Generic math stuff
@@ -342,53 +362,60 @@ def normalize(vec):
     l = length(vec)
     return [x / l for x in vec]
 
+
 def length(vec):
     return math.sqrt(sum([x * x for x in vec]))
+
 
 def dot(x, y):
     return sum([x[i] * y[i] for i in range(len(x))])
 
-def cbrt(x): 
-    if x >= 0: 
-        return math.pow(x, 1.0/3.0) 
-    else: 
+
+def cbrt(x):
+    if x >= 0:
+        return math.pow(x, 1.0/3.0)
+    else:
         return -math.pow(abs(x), 1.0/3.0)
-    
-def polar(x, y, deg=0): # radian if deg=0; degree if deg=1 
-    if deg: 
-        return math.hypot(x, y), 180.0 * math.atan2(y, x) / math.pi 
-    else: 
+
+
+def polar(x, y, deg=0): # radian if deg=0; degree if deg=1
+    if deg:
+        return math.hypot(x, y), 180.0 * math.atan2(y, x) / math.pi
+    else:
         return math.hypot(x, y), math.atan2(y, x)
 
-def quadratic(a, b, c=None): 
-    if c: # (ax^2 + bx + c = 0) 
-        a, b = b / float(a), c / float(a) 
-    t = a / 2.0 
-    r = t**2 - b 
-    if r >= 0: # real roots 
-        y1 = math.sqrt(r) 
-    else: # complex roots 
-        y1 = cmath.sqrt(r) 
-    y2 = -y1 
-    return y1 - t, y2 - t    
 
-def solveCubic(a, b, c, d):    
+def quadratic(a, b, c=None):
+    if c: # (ax^2 + bx + c = 0)
+        a, b = b / float(a), c / float(a)
+    t = a / 2.0
+    r = t**2 - b
+    if r >= 0: # real roots
+        y1 = math.sqrt(r)
+    else: # complex roots
+        y1 = cmath.sqrt(r)
+    y2 = -y1
+    return y1 - t, y2 - t
+
+
+def solveCubic(a, b, c, d):
     cIn = [a, b, c, d]
-    a, b, c = b / float(a), c / float(a), d / float(a) 
-    t = a / 3.0 
-    p, q = b - 3 * t**2, c - b * t + 2 * t**3 
-    u, v = quadratic(q, -(p/3.0)**3) 
-    if type(u) == type(0j): # complex cubic root 
-        r, w = polar(u.real, u.imag) 
-        y1 = 2 * cbrt(r) * math.cos(w / 3.0) 
-    else: # real root 
-        y1 = cbrt(u) + cbrt(v) 
-    y2, y3 = quadratic(y1, p + y1**2) 
+    a, b, c = b / float(a), c / float(a), d / float(a)
+    t = a / 3.0
+    p, q = b - 3 * t**2, c - b * t + 2 * t**3
+    u, v = quadratic(q, -(p/3.0)**3)
+    if type(u) == type(0j): # complex cubic root
+        r, w = polar(u.real, u.imag)
+        y1 = 2 * cbrt(r) * math.cos(w / 3.0)
+    else: # real root
+        y1 = cbrt(u) + cbrt(v)
+    y2, y3 = quadratic(y1, p + y1**2)
     x1 = y1 - t
     x2 = y2 - t
     x3 = y3 - t
-        
+
     return x1, x2, x3
+
 
 #helper function to determine if the current version
 #of the python api represents matrices as column major
@@ -399,23 +426,24 @@ def arePythonMatricesRowMajor():
     is260OrLess = v[0] <= 2 and v[1] <= 60
     is261 = v[0] == 2 and v[1] == 61
     rev = bpy.app.build_revision
-    
+
     if is262OrGreater:
         return True
-    
+
     if is260OrLess:
         return False
-    
+
+
     #apparently, build_revision is not always just a number:
     #http://code.google.com/p/blam/issues/detail?id=11
-    #TODO: find out what the format of bpy.app.build_revision is 
+    #TODO: find out what the format of bpy.app.build_revision is
     #for now, remove anything that isn't a digit
     digits = [str(d) for d in range(9)]
     numberString = ''
     for ch in rev:
         if ch in digits:
             numberString = numberString + ch
-    
+
     #do revision check if we're running 2.61
     #matrices are row major starting in revision r42816
     return int(numberString) >= 42816
@@ -429,6 +457,7 @@ def getMeshFaces(meshObject):
     except:
         return meshObject.data.polygons
 
+
 '''
 PROJECTOR CALIBRATION STUFF
 '''
@@ -437,9 +466,9 @@ class ProjectorCalibrationPanel(bpy.types.Panel):
     bl_label = "Video Projector Calibration"
     bl_space_type = "CLIP_EDITOR"
     bl_region_type = "TOOLS"
-    
+
     def draw(self, context):
-        scn = bpy.context.scene
+        scene = bpy.context.scene
         l = self.layout
         r = l.row()
         r.operator("object.create_proj_calib_win")
@@ -452,28 +481,29 @@ class ProjectorCalibrationPanel(bpy.types.Panel):
 '''
 class CreateProjectorCalibrationWindowOperator(bpy.types.Operator):
     bl_idname = "object.create_proj_calib_win"
-    bl_label = "Create calibration window"
+    bl_label = "Create Calibration Window"
     bl_description = "TODO"
-    
+
     def execute(self, context):
         ws = bpy.context.window_manager.windows
         if len(ws) > 1:
             self.report({'ERROR'}, "Other windows exist. Close them and try again.")
             return{'CANCELLED'}
-        
+
         return bpy.ops.screen.area_dupli('INVOKE_DEFAULT')
+
 
 class SetCalibrationWindowToClipEditor(bpy.types.Operator):
     bl_idname = "object.set_calib_window_to_clip"
-    bl_label = "Clip editor"
+    bl_label = "Clip Editor"
     bl_description = ""
-    
+
     def execute(self, context):
         windows = bpy.context.window_manager.windows
         if len(windows) > 2:
             self.report({'ERROR'}, "Expected two windows. Found " + str(len(windows)))
             return{'CANCELLED'}
-        
+
         #operate on the window with one area
         window = None
         for w in windows:
@@ -481,23 +511,23 @@ class SetCalibrationWindowToClipEditor(bpy.types.Operator):
             if len(areas) == 1:
                 window = w
                 break
-        
+
         if not window:
             self.report({'ERROR'}, "Could not find single area window.")
             return{'CANCELLED'}
-                    
+
         area = window.screen.areas[0]
-    
+
         toolsHidden = False
         propsHidden = False
-                    
+
         for i in area.regions:
             print(i.type, i.width, i.height)
             if i.type == 'TOOLS' and i.width <= 1:
                 toolsHidden = True
             elif i.type == 'TOOL_PROPS' and i.width <= 1:
                 propsHidden = True
-    
+
         area.type = "CLIP_EDITOR"
         override = {'window': window, 'screen': window.screen, 'area': area}
         if not toolsHidden:
@@ -506,20 +536,21 @@ class SetCalibrationWindowToClipEditor(bpy.types.Operator):
             bpy.ops.clip.properties(override)
         bpy.ops.clip.view_all(override)
         bpy.ops.clip.view_zoom_ratio(override, ratio=1)
-    
+
         return{'FINISHED'}
+
 
 class SetCalibrationWindowToView3D(bpy.types.Operator):
     bl_idname = "object.set_calib_window_to_view3d"
-    bl_label = "3D view"
+    bl_label = "3D View"
     bl_description = ""
-    
+
     def execute(self, context):
         windows = bpy.context.window_manager.windows
         if len(windows) > 2:
             self.report({'ERROR'}, "Expected two windows. Found " + str(len(windows)))
             return{'CANCELLED'}
-        
+
         #operate on the window with one area
         window = None
         for w in windows:
@@ -527,16 +558,16 @@ class SetCalibrationWindowToView3D(bpy.types.Operator):
             if len(areas) == 1:
                 window = w
                 break
-        
+
         if not window:
             self.report({'ERROR'}, "Could not find single area window.")
             return{'CANCELLED'}
-        
+
         area = window.screen.areas[0]
-        
+
         toolsHidden = False
         propsHidden = False
-        
+
         for i in area.regions:
             print(i.type, i.width, i.height)
             if i.type == 'TOOLS' and i.width <= 1:
@@ -561,76 +592,81 @@ class SetCalibrationWindowToView3D(bpy.types.Operator):
 
         return{'FINISHED'}
 
+
 '''
 CAMERA CALIBRATION STUFF
 '''
 
-class PhotoModelingToolsPanel(bpy.types.Panel):    
-    bl_label = "Photo Modeling Tools"    
-    bl_space_type = "VIEW_3D"    
-    bl_region_type = "TOOLS"    
+class PhotoModelingToolsPanel(bpy.types.Panel):
+    bl_label = "Photo Modeling Tools"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "TOOLS"
     def draw(self, context):
-        scn = bpy.context.scene
-        l = self.layout
-        r = l.row()
-        b = r.box()
-        b.operator("object.compute_depth_information")
-        b.prop(scn, 'separate_faces')
-        r = l.row()
-        b = r.box()
-        
-        b.operator("object.project_bg_onto_mesh")
-        b.prop(scn, 'projection_method')
-        #self.layout.operator("object.make_edge_x")        
-        l.operator("object.set_los_scale_pivot")
+        blam = context.scene.blam
+
+        layout = self.layout
+        col = layout.column()
+
+        box = col.box()
+        box.operator("object.compute_depth_information")
+        box.prop(blam, "separate_faces")
+
+        col.separator()
+        box = col.box()
+        box.operator("object.project_bg_onto_mesh")
+        box.prop(blam, "projection_method")
+        #self.layout.operator("object.make_edge_x")
+        layout.operator("object.set_los_scale_pivot")
+
 
 class SetLineOfSightScalePivot(bpy.types.Operator):
-    bl_idname = "object.set_los_scale_pivot"    
-    bl_label = "Set line of sight scale pivot"
+    bl_idname = "object.set_los_scale_pivot"
+    bl_label = "Set Line of Sight Scale Pivot"
 
     bl_description = "Set the pivot to the camera origin, which makes scaling equivalent to translation along the line of sight."
-    
+
     def execute(self, context):
         bpy.ops.object.mode_set(mode='OBJECT')
-        
-        selStates = []
-        objs = bpy.context.scene.objects
-        for obj in objs:
-            selStates.append(obj.select)
-            obj.select = False
-        
-        #select the camera
-        bpy.context.scene.camera.select = True
-        
-        #snap the cursor to the camer
+
+        select_states = []
+        objects = context.scene.objects
+        for object in objects:
+            selStates.append(object.select)
+            object.select = False
+
+        # select the camera
+        context.scene.camera.select = True
+
+        # snap the cursor to the camera
         bpy.ops.view3d.snap_cursor_to_selected()
-        
-        #set the cursor to be the pivot
-        space = bpy.context.area.spaces.active
+
+        # set the cursor to be the pivot
+        space = context.area.spaces.active
         print(space.pivot_point)
         space.pivot_point = 'CURSOR'
-        
-        for i in range(len(objs)):
-            obj = objs[i]
-            obj.select = selStates[i]
-        
+
+        for i in range(len(objects)):
+            object = objects[i]
+            object.select = select_states[i]
+
         return{'FINISHED'}
-        
+
+
 class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
-    bl_idname = "object.project_bg_onto_mesh"    
-    bl_label = "Project background image onto mesh"
-    bl_description = "Projects the current 3D view background image onto a mesh (the active object) from the active camera."    
-    
+    bl_idname = "object.project_bg_onto_mesh"
+    bl_label = "Project Background Image onto Mesh"
+    bl_description = "Projects the current 3D view background image onto a mesh (the active object) from the active camera."
+
     projectorName = 'tex_projector'
     materialName = 'cam_map_material'
-   
-    def meshVerticesToNDC(self, cam, mesh):
+
+    def meshVerticesToNDC(self, context, cam, mesh):
 
         #compute a projection matrix transforming
         #points in camera space to points in NDC
         near = cam.data.clip_start
         far = cam.data.clip_end
-        rs = bpy.context.scene.render
+        rs = context.scene.render
         rx = rs.resolution_x
         ry = rs.resolution_y
         tall = rx < ry
@@ -644,7 +680,7 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
             aspect = ry / float(rx)
             w = math.tan(0.5 * fov)
             h = aspect * w
-        
+
         pm = mathutils.Matrix()
         pm[0][0] = 1 / w
         pm[1][1] = 1 / h
@@ -652,15 +688,15 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
         pm[2][3] = 2 * near * far / (near - far)
         pm[3][2] = -1.0
         pm[3][3] = 0.0
-        
+
         if not arePythonMatricesRowMajor():
             pm.transpose()
-        
+
         returnVerts = []
 
         for v in mesh.data.vertices:
             #the vert in local coordinates
-            vec = v.co.to_4d()    
+            vec = v.co.to_4d()
             #the vert in world coordinates
             vec = mesh.matrix_world * vec
             #the vert in clip coordinates
@@ -669,99 +705,99 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
             w = vec[3]
             vec = [x / w for x in vec]
             returnVerts.append((vec[0], vec[1], vec[2]))
-        
+
         return returnVerts
-   
-    def addUVsProjectedFromView(self, mesh):
-        cam = bpy.context.scene.camera
-        
+
+    def addUVsProjectedFromView(self, context, mesh):
+        cam = context.scene.camera
+
         #get the mesh vertices in normalized device coordinates
         #as seen through the active camera
-        ndcVerts = self.meshVerticesToNDC(cam, mesh)
-        
+        ndcVerts = self.meshVerticesToNDC(cam, context, mesh)
+
         #create a uv layer
         bpy.ops.object.mode_set(mode='EDIT')
         #projecting from view here, but the current view might not
-        #be the camera, so the uvs are computed manually a couple 
+        #be the camera, so the uvs are computed manually a couple
         #of lines down
         bpy.ops.uv.project_from_view(scale_to_bounds=True)
         bpy.ops.object.mode_set(mode='OBJECT')
-        
-        #set uvs to match the vertex x and y components in NDC 
+
+        #set uvs to match the vertex x and y components in NDC
         isBmesh = True
         try:
             f = mesh.data.faces
             isBmesh = False
         except:
             pass
-                
+
         if isBmesh:
             loops = mesh.data.loops
             uvLoops = mesh.data.uv_layers[0].data
-            for loop, uvLoop in zip(loops, uvLoops):    
+            for loop, uvLoop in zip(loops, uvLoops):
                 vIdx = loop.vertex_index
-                print("loop", loop, "vertex", loop.vertex_index, "uvLoop", uvLoop)                    
+                print("loop", loop, "vertex", loop.vertex_index, "uvLoop", uvLoop)
                 ndcVert = ndcVerts[vIdx]
                 uvLoop.uv[0] = 0.5 * (ndcVert[0] + 1.0)
                 uvLoop.uv[1] = 0.5 * (ndcVert[1] + 1.0)
-            
+
         else:
             assert(len(getMeshFaces(mesh)) == len(mesh.data.uv_textures[0].data))
             for meshFace, uvFace in zip(getMeshFaces(mesh), mesh.data.uv_textures[0].data):
                 faceVerts = [ndcVerts[i] for i in meshFace.vertices]
-            
+
                 for i in range(len(uvFace.uv)):
                     uvFace.uv[i][0] = 0.5 * (faceVerts[i][0] + 1.0)
                     uvFace.uv[i][1] = 0.5 * (faceVerts[i][1] + 1.0)
-        
-    def performSimpleProjection(self, camera, mesh, img):
-        if len(mesh.material_slots) == 0:
-            mat = bpy.data.materials.new(self.materialName)
-            mesh.data.materials.append(mat)
-        else:
-            mat = mesh.material_slots[0].material   
-        mat.use_shadeless = True
-        mat.use_face_texture = True
-        
-        
-                
-        self.addUVsProjectedFromView(mesh)
-        
-        for f in mesh.data.uv_textures[0].data:
-            f.image = img
-    
-    def performHighQualityProjection(self, camera, mesh, img):
+
+    def performSimpleProjection(self, context, camera, mesh, img):
         if len(mesh.material_slots) == 0:
             mat = bpy.data.materials.new(self.materialName)
             mesh.data.materials.append(mat)
         else:
             mat = mesh.material_slots[0].material
         mat.use_shadeless = True
-        mat.use_face_texture = True 
-        
-        
-        
+        mat.use_face_texture = True
+
+
+
+        self.addUVsProjectedFromView(context, mesh)
+
+        for f in mesh.data.uv_textures[0].data:
+            f.image = img
+
+    def performHighQualityProjection(self, context, camera, mesh, img):
+        if len(mesh.material_slots) == 0:
+            mat = bpy.data.materials.new(self.materialName)
+            mesh.data.materials.append(mat)
+        else:
+            mat = mesh.material_slots[0].material
+        mat.use_shadeless = True
+        mat.use_face_texture = True
+
+
+
         #the texture sampling is not perspective correct
         #when directly using sticky UVs or UVs projected from the view
         #this is a pretty messy workaround that gives better looking results
-        self.addUVsProjectedFromView(mesh)
-        
+        self.addUVsProjectedFromView(context, mesh)
+
         #then create an empty object that will serve as a texture projector
-        #if the mesh has a child with the name of a texture projector, 
+        #if the mesh has a child with the name of a texture projector,
         #reuse it
         reusedProjector = None
         for ch in mesh.children:
             if self.projectorName in ch.name:
                 reusedProjector = ch
                 break
-        
+
         if reusedProjector:
             projector = reusedProjector
         else:
             bpy.ops.object.camera_add()
             projector = bpy.context.active_object
-        
-        bpy.context.scene.objects.active = projector
+
+        context.scene.objects.active = projector
         projector.name = mesh.name + '_' + self.projectorName
         projector.matrix_world = camera.matrix_world
         projector.select = False
@@ -770,59 +806,59 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
         projector.data.sensor_width = camera.data.sensor_width
         projector.data.sensor_height = camera.data.sensor_height
         projector.data.sensor_fit = camera.data.sensor_fit
-        
+
         #parent the projector to the mesh for convenience
         for obj in bpy.context.scene.objects:
             obj.select = False
-        
+
         projector.select = True
-        bpy.context.scene.objects.active = mesh
+        context.scene.objects.active = mesh
         #bpy.ops.object.parent_set()
-        
+
         #lock the projector to the mesh
         #bpy.context.scene.objects.active = projector
         #bpy.ops.object.constraint_add(type='COPY_LOCATION')
         #projector.constraints[-1].target = mesh
-        
-        #create a simple subdivision modifier on the mesh object. 
+
+        #create a simple subdivision modifier on the mesh object.
         #this subdivision is what alleviates the texture sampling
         #artefacts.
-        bpy.context.scene.objects.active = mesh
+        context.scene.objects.active = mesh
         levels = 3
         bpy.ops.object.modifier_add()
-                
+
         modifier = mesh.modifiers[-1]
         modifier.subdivision_type = 'SIMPLE'
         modifier.levels = levels
         modifier.render_levels = levels
-        
+
         #then create a uv project modifier that will project the
         #image onto the subdivided mesh using our projector object.
         bpy.ops.object.modifier_add(type='UV_PROJECT')
         modifier = mesh.modifiers[-1]
-        modifier.aspect_x = bpy.context.scene.render.resolution_x / float(bpy.context.scene.render.resolution_y)
+        modifier.aspect_x = context.scene.render.resolution_x / float(context.scene.render.resolution_y)
         modifier.image = img
         modifier.use_image_override = True
         modifier.projectors[0].object = projector
         modifier.uv_layer = mesh.data.uv_textures[0].name
-                
+
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.object.mode_set(mode='OBJECT')
-    
+
     def prepareMesh(self, mesh):
         #remove all uv layers
         while len(mesh.data.uv_textures) > 0:
             bpy.ops.mesh.uv_texture_remove()
-        
+
         #remove all modifiers
-        for m in mesh.modifiers:
-            bpy.ops.object.modifier_remove(modifier=m.name)
-    
+        for modifier in mesh.modifiers:
+            bpy.ops.object.modifier_remove(modifier=modifier.name)
+
     def execute(self, context):
         '''
         Get the active object and make sure it is a mesh
         '''
-        mesh = bpy.context.active_object
+        mesh = context.active_object
 
         if mesh == None:
             self.report({'ERROR'}, "There is no active object")
@@ -830,24 +866,24 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
         elif not 'Mesh' in str(type(mesh.data)):
             self.report({'ERROR'}, "The active object is not a mesh")
             return{'CANCELLED'}
-        
+
         '''
         Get the current camera
         '''
-        camera = bpy.context.scene.camera
+        camera = context.scene.camera
         if not camera:
             self.report({'ERROR'}, "No active camera.")
-            return{'CANCELLED'}    
-        
-        
-        activeSpace = bpy.context.area.spaces.active
-        
-        if len(activeSpace.background_images) == 0:
+            return{'CANCELLED'}
+
+
+        active_space = context.area.spaces.active
+
+        if len(active_space.background_images) == 0:
             self.report({'ERROR'}, "No backround images of clips found.")
             return{'CANCELLED'}
-        
-        #check what kind of background we're dealing with
-        bg = activeSpace.background_images[0]
+
+        #check what kind of background we are dealing with
+        bg = active_space.background_images[0]
         if bg.image != None:
             img = bg.image
         elif bg.clip != None:
@@ -857,15 +893,15 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
                 img = bpy.data.images.load(path)
             except:
                 self.report({'ERROR'}, "Cannot load image %s" % path)
-                return{'CANCELLED'} 
+                return{'CANCELLED'}
         else:
             #shouldnt end up here
             self.report({'ERROR'}, "Both background clip and image are None")
             return{'CANCELLED'}
-       
+
         #if we made it here, we have a camera, a mesh and an image.
         self.prepareMesh(mesh)
-        method = bpy.context.scene.projection_method
+        method = context.scene.blam.projection_method
         if method == 'hq':
             self.performHighQualityProjection(camera, mesh, img)
         elif method == 'simple':
@@ -873,51 +909,52 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
         else:
             self.report({'ERROR'}, "Unknown projection method")
             return{'CANCELLED'}
-        
-        activeSpace.viewport_shade = 'TEXTURED'
-        
+
+        active_space.viewport_shade = 'TEXTURED'
+
         return{'FINISHED'}
 
+
 class Reconstruct3DMeshOperator(bpy.types.Operator):
-    bl_idname = "object.compute_depth_information"    
-    bl_label = "Reconstruct 3D geometry"
-    bl_description = "Reconstructs a 3D mesh with rectangular faces based on a mesh with faces lining up with the corresponding faces in the image. Relies on the active camera being properly calibrated."    
-    
+    bl_idname = "object.compute_depth_information"
+    bl_label = "Reconstruct 3D Geometry"
+    bl_description = "Reconstructs a 3D mesh with rectangular faces based on a mesh with faces lining up with the corresponding faces in the image. Relies on the active camera being properly calibrated."
+
     def evalEq17(self, origin, p1, p2):
         a = [x - y for x, y in zip(origin, p1)]
         b = [x - y for x, y in zip(origin, p2)]
         return dot(a, b)
-    
+
     def evalEq27(self, l):
         return self.C4 * l ** 4 + self.C3 * l ** 3 + self.C2 * l ** 2 + self.C1 * l + self.C0
 
     def evalEq28(self, l):
         return self.B4 * l ** 4 + self.B3 * l ** 3 + self.B2 * l ** 2 + self.B1 * l + self.B0
-    
+
     def evalEq29(self, l):
         return self.D3 * l ** 3 + self.D2 * l ** 2 + self.D1 * l + self.D0
-        
+
     def worldToCameraSpace(self, verts):
-        
+
         ret = []
         for v in verts:
             #the vert in local coordinates
-            vec = v.co.to_4d()    
+            vec = v.co.to_4d()
             #the vert in world coordinates
             vec = self.mesh.matrix_world * vec
             #the vert in camera coordinates
-            vec = self.camera.matrix_world.inverted() * vec     
-            
+            vec = self.camera.matrix_world.inverted() * vec
+
             ret.append(vec[0:3])
         return ret
-    
-    def computeCi(self, Qab, Qac, Qad, Qbc, Qbd, Qcd):        
+
+    def computeCi(self, Qab, Qac, Qad, Qbc, Qbd, Qcd):
         self.C4 = Qad * Qbc * Qbd - Qac * Qbd ** 2
         self.C3 = Qab * Qad * Qbd * Qcd - Qad ** 2 * Qcd + Qac * Qad * Qbd ** 2 - Qad ** 2 * Qbc * Qbd - Qbc * Qbd + 2 * Qab * Qac * Qbd - Qab * Qad * Qbc
         self.C2 = -Qab * Qbd * Qcd - Qab ** 2 * Qad * Qcd + 2 * Qad * Qcd + Qad * Qbc * Qbd - 3 * Qab * Qac * Qad * Qbd + Qab * Qad ** 2 * Qbc + Qab * Qbc + Qac * Qad ** 2 - Qab ** 2 * Qac
         self.C1 = Qab ** 2 * Qcd - Qcd + Qab * Qac * Qbd - Qab * Qad * Qbc + 2 * Qab ** 2 * Qac * Qad - 2 * Qac * Qad
         self.C0 = Qac - Qab ** 2 * Qac
-        
+
     def computeBi(self, Qab, Qac, Qad, Qbc, Qbd, Qcd):
         self.B4 = Qbd - Qbd * Qcd ** 2
         self.B3 = 2 * Qad * Qbd * Qcd ** 2 + Qab * Qcd ** 2 + Qac * Qbd * Qcd - Qad * Qbc * Qcd - 2 * Qad * Qbd - Qab
@@ -927,38 +964,38 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
 
     def computeQuadDepthInformation(self, qHatA, qHatB, qHatC, qHatD):
 
-        #print()        
+        #print()
         #print("computeQuadDepthInformation")
-        
+
         '''
         compute the coefficients Qij
         '''
         Qab = dot(qHatA, qHatB)
         Qac = dot(qHatA, qHatC)
         Qad = dot(qHatA, qHatD)
-        
+
         Qba = dot(qHatB, qHatA)
         Qbc = dot(qHatB, qHatC)
         Qbd = dot(qHatB, qHatD)
-        
+
         Qca = dot(qHatC, qHatA)
         Qcb = dot(qHatC, qHatB)
         Qcd = dot(qHatC, qHatD)
-        
+
         #print("Qab", Qab, "Qac", Qac, "Qad", Qad)
         #print("Qba", Qba, "Qbc", Qbc, "Qbd", Qbd)
         #print("Qca", Qca, "Qcb", Qcb, "Qcd", Qcd)
-        
+
         '''
         compute the coefficients Ci of equation (27)
         '''
         self.computeCi(Qab, Qac, Qad, Qbc, Qbd, Qcd)
-        
+
         '''
         compute the coefficients Bi of equation (28)
         '''
         self.computeBi(Qab, Qac, Qad, Qbc, Qbd, Qcd)
-        
+
         '''
         compute the cofficients Di of equation (29)
         '''
@@ -973,32 +1010,32 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         '''
         roots = solveCubic(self.D3, self.D2, self.D1, self.D0)
         #print("Eq 29 Roots", roots)
-        
+
         '''
         choose one of the three computed roots. Tan, Sullivan and Baker propose
         choosing a real root that satisfies "(27) or (28)". Since these
-        equations are derived from the orthogonality equations (17) and 
-        since we're interested in a quad with edges that are "as 
+        equations are derived from the orthogonality equations (17) and
+        since we're interested in a quad with edges that are "as
         orthogonal as possible", in this implementation the positive real
         root that minimizes the quad orthogonality error is chosen instead.
         '''
-        
+
         chosenRoot = None
         minError = None
-        
+
         #print()
         #print("Finding root")
         for root in roots:
-            
+
             #print("Root", root)
-            
+
             if type(root) == type(0j):
                 #complex root. do nothing
                 continue
             elif root <= 0:
                 #non-positive root. do nothing
                 continue
-            
+
             #compute depth values lambdaA-D based on the current root
             lambdaD = root
             self.lambdaA = 1 #arbitrarily set to 1
@@ -1009,29 +1046,29 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             denLambdaC = (Qac - Qcd * lambdaD)
             self.lambdaC = numLambdaC / denLambdaC
             self.lambdaD = lambdaD
-            
+
             #print("lambdaA", numLambdaA, "/", denLambdaA)
             #print("lambdaC", numLambdaC, "/", denLambdaC)
-            
+
             #compute vertex positions
             pA = [x * self.lambdaA for x in qHatA]
             pB = [x * self.lambdaB for x in qHatB]
             pC = [x * self.lambdaC for x in qHatC]
             pD = [x * self.lambdaD for x in qHatD]
-            
+
             #compute the mean orthogonality error for the resulting quad
             meanError, maxError = self.getQuadError(pA, pB, pC, pD)
-            
+
             if minError == None or meanError < minError:
                 minError = meanError
                 chosenRoot = root
-        
+
         if chosenRoot == None:
             self.report({'ERROR'}, "No appropriate root found.")
             return #TODO cancel properly
-        
+
         #print("Chosen root", chosenRoot)
-        
+
         '''
         compute and return the final vertex positions from equation (16)
         '''
@@ -1040,39 +1077,39 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         self.lambdaB = (Qad * lambdaD - 1.0) / (Qbd * lambdaD - Qab)
         self.lambdaC = (Qad * lambdaD - lambdaD * lambdaD) / (Qac - Qcd * lambdaD)
         self.lambdaD = lambdaD
-            
+
         pA = [x * self.lambdaA for x in qHatA]
         pB = [x * self.lambdaB for x in qHatB]
         pC = [x * self.lambdaC for x in qHatC]
         pD = [x * self.lambdaD for x in qHatD]
-        
+
         meanError, maxError = self.getQuadError(pA, pB, pC, pD)
         #self.report({'INFO'}, "Error: " + str(meanError) + " (" + str(maxError) + ")")
-            
+
         return [pA, pB, pC, pD]
-    
+
     def getQuadError(self, pA, pB, pC, pD):
         orthABD = self.evalEq17(pA, pB, pD)
         orthABC = self.evalEq17(pB, pA, pC)
         orthBCD = self.evalEq17(pC, pB, pD)
         orthACD = self.evalEq17(pD, pA, pC)
-        
+
         absErrors = [abs(orthABD), abs(orthABC), abs(orthBCD), abs(orthACD)]
         maxError = max(absErrors)
-        meanError = 0.25 * sum(absErrors)    
+        meanError = 0.25 * sum(absErrors)
         #print("absErrors", absErrors, "meanError", meanError)
-        
+
         return meanError, maxError
-               
-    def createMesh(self, inputMesh, computedCoordsByFace, quads):
+
+    def createMesh(self, context, inputMesh, computedCoordsByFace, quads):
         '''
         Mesh creation is done in two steps:
-        1. adjust the computed depth values so that the 
+        1. adjust the computed depth values so that the
            quad vertices line up as well as possible
         2. optionally merge each set of computed quad vertices
            that correspond to a single vertex in the input mesh
         '''
-        
+
         '''
         Step 1
         least squares minimize the depth difference
@@ -1080,7 +1117,7 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         computing depth factors for each quad.
         '''
         quadFacePairsBySharedEdge = {}
-                
+
         def indexOfFace(fcs, face):
                 i = 0
                 for f in fcs:
@@ -1094,17 +1131,17 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         quadFaces = []
         for e in inputMesh.data.edges:
             ev = e.vertices
-            
+
             #gather all faces containing the current edge
             facesContainingEdge = []
-            
+
             for f in getMeshFaces(inputMesh):
                 matchFound = False
                 fv = f.vertices
                 if len(fv) != 4:
                     #ignore non-quad faces
                     continue
-                
+
                 if f not in quadFaces:
                     quadFaces.append(f)
 
@@ -1112,16 +1149,16 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
                 #print("fv", fv, "ev", ev, "len(set(fv) & set(ev))", len(set(fv) & set(ev)))
                 if len(set(fv) & set(ev)) == 2:
                     matchFound = True
-                
+
                 if matchFound:
                     assert(f not in facesContainingEdge)
                     facesContainingEdge.append(f)
-            
+
             #sanity check. an edge can be shared by at most two faces.
             assert(len(facesContainingEdge) <= 2 and len(facesContainingEdge) >= 0)
-                
+
             edgeIsShared = (len(facesContainingEdge) == 2)
-            
+
             if edgeIsShared:
                 quadFacePairsBySharedEdge[e] = facesContainingEdge
             else:
@@ -1129,11 +1166,11 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         numSharedEdges = len(quadFacePairsBySharedEdge.keys())
         numQuadFaces = len(quadFaces)
         #sanity check: the shared and unshared edges are disjoint and should add up to the total number of edges
-        assert(unsharedEdgeCount + numSharedEdges  == len(inputMesh.data.edges)) 
+        assert(unsharedEdgeCount + numSharedEdges  == len(inputMesh.data.edges))
         #print("num shared edges", numSharedEdges)
         #print(quadFacePairsBySharedEdge)
         #assert(False)
-        
+
         #each shared edge gives rise to one equation per vertex,
         #so the number of rows in the matrix is 2n, where n is
         #the number of shared edges. the number of columns is m-1
@@ -1148,24 +1185,24 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         vertsToMergeByOriginalIdx = {}
         for e in quadFacePairsBySharedEdge.keys():
             pair = quadFacePairsBySharedEdge[e]
-            
+
             #the two original mesh faces sharing the current edge
             f0 = pair[0]
             f1 = pair[1]
-            
+
             assert(f0 in faces)
             assert(f1 in faces)
             assert(len(f0.vertices) == 4)
             assert(len(f1.vertices) == 4)
-            
+
             #the two computed quads corresponding to the original mesh faces
             c0 = computedCoordsByFace[f0]
             c1 = computedCoordsByFace[f1]
-            
+
             #the indices into the output mesh of the two faces sharing the current edge
             f0Idx = quads.index(c0)#indexOfFace(faces, f0)
             f1Idx = quads.index(c1)#indexOfFace(faces, f1)
-            
+
             def getQuadVertWithMeshIdx(quad, idx):
                 #print("idx", idx, "quad", quad)
                 i = 0
@@ -1174,31 +1211,31 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
                         return p, i
                     i = i + 1
                 assert(False) #shouldnt end up here
-            
+
             #vij is vertex j of the current edge in face i
             #idxij is the index of vertex j in quad i (0-3)
             v00, idx00 = getQuadVertWithMeshIdx(c0, e.vertices[0])
             v01, idx01 = getQuadVertWithMeshIdx(c0, e.vertices[1])
-            
+
             v10, idx10 = getQuadVertWithMeshIdx(c1, e.vertices[0])
             v11, idx11 = getQuadVertWithMeshIdx(c1, e.vertices[1])
-            
+
             #vert 0 depths
             lambda00 = v00[2]
             lambda10 = v10[2]
-            
+
             #vert 1 depths
             lambda01 = v01[2]
             lambda11 = v11[2]
             #print(faces, f0, f1)
-                        
+
             assert(f0Idx >= 0 and f0Idx < numFaces)
             assert(f1Idx >= 0 and f1Idx < numFaces)
-            
+
             #vert 0
             vert0MatrixRow = [0] * (numQuadFaces - 1)
             vert0RhRow = [0]
-            
+
             if f0Idx == 0:
                 vert0RhRow[0] = lambda00
                 vert0MatrixRow[f1Idx - 1] = lambda10
@@ -1208,11 +1245,11 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             else:
                 vert0MatrixRow[f0Idx - 1] = lambda00
                 vert0MatrixRow[f1Idx - 1] = -lambda10
-            
+
             #vert 1
             vert1MatrixRow = [0] * (numQuadFaces - 1)
             vert1RhRow = [0]
-            
+
             if f0Idx == 0:
                 vert1RhRow[0] = lambda01
                 vert1MatrixRow[f1Idx - 1] = lambda11
@@ -1222,32 +1259,32 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             else:
                 vert1MatrixRow[f0Idx - 1] = lambda01
                 vert1MatrixRow[f1Idx - 1] = -lambda11
-                
+
             matrixRows.append(vert0MatrixRow)
             matrixRows.append(vert1MatrixRow)
-            
+
             rhRows.append(vert0RhRow)
             rhRows.append(vert1RhRow)
-            
+
             #store index information for vertex merging in the new mesh
             if e.vertices[0] not in vertsToMergeByOriginalIdx.keys():
                 vertsToMergeByOriginalIdx[e.vertices[0]] = []
             if e.vertices[1] not in vertsToMergeByOriginalIdx.keys():
                 vertsToMergeByOriginalIdx[e.vertices[1]] = []
-             
+
             l0 = vertsToMergeByOriginalIdx[e.vertices[0]]
             l1 = vertsToMergeByOriginalIdx[e.vertices[1]]
-            
+
             if idx00 + 4 * f0Idx not in l0:
                 l0.append(idx00 + 4 * f0Idx)
             if idx10 + 4 * f1Idx not in l0:
                 l0.append(idx10 + 4 * f1Idx)
-    
+
             if idx01 + 4 * f0Idx not in l1:
                 l1.append(idx01 + 4 * f0Idx)
             if idx11 + 4 * f1Idx not in l1:
                 l1.append(idx11 + 4 * f1Idx)
-       
+
         assert(len(matrixRows) == len(rhRows))
         assert(len(matrixRows) == 2 * len(quadFacePairsBySharedEdge))
         #solve for the depth factors 2,3...m
@@ -1256,20 +1293,20 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
 
         #print("rhRows")
         #print(rhRows)
-        
+
         #sanity check: the sets of vertex indices to merge should be disjoint
         for vs in vertsToMergeByOriginalIdx.values():
-            
+
             for idx in vs:
                 assert(idx >= 0 and idx < numFaces * 4)
-            
+
             for vsRef in vertsToMergeByOriginalIdx.values():
                 if vs != vsRef:
                     #check that the current sets are disjoint
                     s1 = set(vs)
                     s2 = set(vsRef)
                     assert(len(s1 & s2) == 0)
-                    
+
         if numQuadFaces > 2:
             m = Mat(matrixRows)
             b = Mat(rhRows)
@@ -1283,9 +1320,9 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             factors = [1, f]
         elif numQuadFaces == 1:
             factors = [1]
-        
-        
-        
+
+
+
         #print("factors", factors)
         #multiply depths by the factors computed per face depth factors
         #quads = []
@@ -1300,16 +1337,16 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
                 #print("vert after", vert)
                 quad[i] = vert
             #quads.append(quad)
-        
+
         #create the actual blender mesh
         bpy.ops.object.mode_set(mode='OBJECT')
         name = inputMesh.name + '_3D'
         #print("createM  esh", points)
-        me = bpy.data.meshes.new(name)    
-        ob = bpy.data.objects.new(name, me)    
-        ob.show_name = True    
-        # Link object to scene    
-        bpy.context.scene.objects.link(ob)    
+        mesh = bpy.data.meshes.new(name)
+        object = bpy.data.objects.new(name, mesh)
+        object.show_name = True
+        # Link object to scene
+        context.scene.objects.link(object)
         verts = []
         faces = []
         idx = 0
@@ -1332,13 +1369,13 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         #print("out edges", [e.vertices[:] for e in me.edges])
         #print("vertsToMergeByOriginalIdx")
         #print(vertsToMergeByOriginalIdx)
-        mergeVertices = not bpy.context.scene.separate_faces
+        mergeVertices = not context.scene.separate_faces
         if mergeVertices:
             for vs in vertsToMergeByOriginalIdx.values():
                 print("merging verts", vs)
                 #merge at the mean position, which is guaranteed to
                 #lie on the line of sight, since all the vertices do
-                
+
                 mean = [0, 0, 0]
                 for idx in vs:
                     #print("idx", idx)
@@ -1347,23 +1384,23 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
 
                     for i in range(3):
                         mean[i] = mean[i] + currVert[i] / float(len(vs))
-                
+
                 for idx in vs:
                     verts[idx] = mean
         print("2")
-        # Update mesh with new data    
-        me.from_pydata(verts, [], faces)    
-        me.update(calc_edges=True)
-        ob.select = True
-        bpy.context.scene.objects.active = ob
+        # Update mesh with new data
+        mesh.from_pydata(verts, [], faces)
+        mesh.update(calc_edges=True)
+        object.select = True
+        context.scene.objects.active = object
 
         #finally remove doubles
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.remove_doubles()
         bpy.ops.object.mode_set(mode='OBJECT')
-            
-        return ob
-    
+
+        return object
+
     def getOutputMeshScale(self, camera, inMesh, outMesh):
         inMeanPos = [0.0] * 3
         cmi = camera.matrix_world.inverted()
@@ -1373,7 +1410,7 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             vCamSpace =  cmi * mm * v.co.to_4d()
             for i in range(3):
                 inMeanPos[i] = inMeanPos[i] + vCamSpace[i] / float(len(inMesh.data.vertices))
-        
+
         outMeanPos = [0.0] * 3
         for v in outMesh.data.vertices:
             for i in range(3):
@@ -1381,18 +1418,18 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
 
         inDistance = math.sqrt(sum([x * x for x in inMeanPos]))
         outDistance = math.sqrt(sum([x * x for x in outMeanPos]))
-        
-        print(inMeanPos, outMeanPos, inDistance, outDistance)        
+
+        print(inMeanPos, outMeanPos, inDistance, outDistance)
 
         if outDistance == 0.0:
             #if we need to handle this case, we probably have bigger problems...
             #anyway, return 1.
             return 1
-        
+
         return inDistance / outDistance
-    
+
     def areAllMeshFacesConnected(self, mesh):
-        
+
         def getFaceNeighbors(faces, face):
             neighbors = []
             for v in face.vertices:
@@ -1404,15 +1441,15 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
                         if otherFace not in neighbors:
                             neighbors.append(otherFace)
             return neighbors
-        
+
         def visitNeighbors(faces, face, visitedFaces):
             ns = getFaceNeighbors(faces, face)
             for n in ns:
                 if n not in visitedFaces:
                     visitedFaces.append(n)
                     visitNeighbors(faces, n, visitedFaces)
-        
-        
+
+
         faces = getMeshFaces(mesh)
         if len(faces) == 1:
             return True
@@ -1420,28 +1457,28 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
         visitNeighbors(faces, faces[0], visitedFaces)
 
         return len(visitedFaces) == len(faces)
-        
+
     def areAllMeshFacesQuads(self, mesh):
         for f in getMeshFaces(mesh):
             if len(f.vertices) != 4:
                 return False
         return True
-    
+
     def execute(self, context):
-        
-        scn = bpy.context.scene
-        
+
+        scene = context.scene
+
         '''
         get the active camera
         '''
-        self.camera = bpy.context.scene.camera
+        self.camera = scene.camera
         if self.camera == None:
             self.report({'ERROR'}, "There is no active camera")
-                    
+
         '''
         get the mesh containing the quads, assume it's the active object
         '''
-        self.mesh = bpy.context.active_object
+        self.mesh = context.active_object
 
         if self.mesh == None:
             self.report({'ERROR'}, "There is no active object")
@@ -1451,14 +1488,14 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             return{'CANCELLED'}
         if len(getMeshFaces(self.mesh)) == 0:
             self.report({'ERROR'}, "The mesh does not have any faces.")
-            return{'CANCELLED'}    
+            return{'CANCELLED'}
         if not self.areAllMeshFacesQuads(self.mesh):
             self.report({'ERROR'}, "The mesh must consist of quad faces only.")
-            return{'CANCELLED'}    
+            return{'CANCELLED'}
         if not self.areAllMeshFacesConnected(self.mesh):
             self.report({'ERROR'}, "All faces of the input mesh must be connected.")
             return{'CANCELLED'}
-        
+
         '''
         process all quads from the mesh individually, computing vertex depth
         values for each of them.
@@ -1472,103 +1509,119 @@ class Reconstruct3DMeshOperator(bpy.types.Operator):
             #if this is a quad face, process it
             if len(f.vertices) == 4:
                 assert(f not in computedCoordsByFace.keys())
-                
+
                 #gather quad vertices in the local coordinate frame of the
                 #mesh
                 inputPointsLocalMeshSpace = []
                 for idx in f.vertices:
                     inputPointsLocalMeshSpace.append(self.mesh.data.vertices[idx])
-                
+
                 #transform vertices to camera space
                 inputPointsCameraSpace = self.worldToCameraSpace(inputPointsLocalMeshSpace)
-                
+
                 #compute normalized input vectors (eq 16)
                 qHats = [normalize(x) for x in inputPointsCameraSpace]
 
                 #run the algorithm to create a quad with depth. coords in camera space
                 outputPointsCameraSpace = self.computeQuadDepthInformation(*qHats)
-                
+
                 #store the index in the original mesh of the computed quad verts.
                 #used later when constructing the output mesh.
                 #print("quad")
                 for i in range(4):
                    outputPointsCameraSpace[i] = list(outputPointsCameraSpace[i][:])
                    outputPointsCameraSpace[i].append(f.vertices[i])
-                
-                #remember which original mesh face corresponds to the computed quad       
+
+                #remember which original mesh face corresponds to the computed quad
                 computedCoordsByFace[f] = outputPointsCameraSpace
                 quads.append(outputPointsCameraSpace)
             else:
                 assert(False) #no non-quads allowed. should have been caught earlier
-              
-        m = self.createMesh(self.mesh, computedCoordsByFace, quads)
-        
+
+        m = self.createMesh(context, self.mesh, computedCoordsByFace, quads)
+
         #up intil now, coords have been in camera space. transform the final mesh so
         #its transform (and thus origin) conicides with the camera.
-        m.matrix_world = bpy.context.scene.camera.matrix_world
-        
+        m.matrix_world = scene.camera.matrix_world
+
         #finally apply a uniform scale that matches the distance between
         #the camera and mean point of the two meshes
         uniformScale = self.getOutputMeshScale(self.camera, self.mesh, m)
         m.scale = [uniformScale] * 3
-        
+
         return{'FINISHED'}
+
 
 class CameraCalibrationPanel(bpy.types.Panel):
     '''
     The GUI for the focal length and camera orientation functionality.
     '''
-    bl_label = "Static Camera Calibration"    
-    bl_space_type = "CLIP_EDITOR"    
-    bl_region_type = "TOOLS"    
-    
-    def draw(self, context): 
-        
-        l = self.layout
-        scn = context.scene
-        l.prop(scn, 'calibration_type')
-        row = l.row()        
-        box = row.box()
-        box.label("Line set 1 (first grease pencil layer)")
-        box.prop(scn, 'vp1_axis')
-        
-        row = l.row()        
-        box = row.box()
-        singleVp = scn.calibration_type == 'one_vp'
-        if singleVp:
-            box.label("Horizon line (second grease pencil layer)")
-            box.prop(scn, 'use_horizon_segment')
-            #box.label("An optional single line segment parallel to the horizon.")
-        else:
-            box.label("Line set 2 (second grease pencil layer)")
-            box.prop(scn, 'vp2_axis')
-        row = l.row()        
-        #row.enabled = singleVp
-        if singleVp:
-            row.prop(scn, 'up_axis')
-        else:
-            row.prop(scn, 'optical_center_type')
-        #TODO l.prop(scn, 'vp1_only')
+    bl_label = "Static Camera Calibration"
+    bl_space_type = "CLIP_EDITOR"
+    bl_region_type = "TOOLS"
 
-        l.prop(scn, 'set_cambg')
-        l.operator("object.estimate_focal_length")  
+    def draw(self, context):
+        layout = self.layout
+        blam = context.scene.blam
+
+        col = layout.column()
+        col.prop(blam, 'calibration_type')
+        col.separator()
+
+        calibration_type = blam.calibration_type
+        if calibration_type == 'ONE_VP':
+            box = col.box()
+            box.label("Line set 1 (first grease pencil layer)")
+            box.prop(blam, 'vp1_axis')
+
+            col.separator()
+
+            box = col.box()
+            box.label("Horizon line (second grease pencil layer)")
+            box.prop(blam, 'use_horizon_segment')
+            #box.label("An optional single line segment parallel to the horizon.")
+
+            col.separator()
+            col.prop(blam, 'up_axis')
+
+        elif calibration_type == 'TWO_VP':
+            box = col.box()
+            box.label("Line set 1 (first grease pencil layer)")
+            box.prop(blam, 'vp1_axis')
+
+            col.separator()
+
+            box = col.box()
+            box.label("Line set 2 (second grease pencil layer)")
+            box.prop(blam, 'vp2_axis')
+
+            col.separator()
+            col.prop(blam, 'optical_center_type')
+
+        else:
+            pass
+
+        col.separator()
+        col.prop(blam, 'set_cambg')
+        col.operator("object.estimate_focal_length")
+
 
 class CameraCalibrationOperator(bpy.types.Operator):
     '''\brief This operator handles estimation of focal length and camera orientation
     from input line segments. All sections numbers, equations numbers etc
-    refer to "Using Vanishing Points for Camera Calibration and Coarse 3D Reconstruction 
+    refer to "Using Vanishing Points for Camera Calibration and Coarse 3D Reconstruction
     from a Single Image" by E. Guillou, D. Meneveaux, E. Maisel, K. Bouatouch.
     (http://www.irisa.fr/prive/kadi/Reconstruction/paper.ps.gz).
     '''
-    
-    bl_idname = "object.estimate_focal_length"    
-    bl_label = "Calibrate active camera"
+
+    bl_idname = "object.estimate_focal_length"
+    bl_label = "Calibrate Active Camera"
     bl_description = "Computes the focal length and orientation of the active camera based on the provided grease pencil strokes."
 
     def computeSecondVanishingPoint(self, Fu, f, P, horizonDir):
         '''Computes the coordinates of the second vanishing point
-        based on the first, a focal length, the center of projection and 
-        the desired horizon tilt angle. The equations here are derived from 
+        based on the first, a focal length, the center of projection and
+        the desired horizon tilt angle. The equations here are derived from
         section 3.2 "Determining the focal length from a single image".
         param Fu the first vanishing point in normalized image coordinates.
         param f the relative focal length.
@@ -1576,14 +1629,14 @@ class CameraCalibrationOperator(bpy.types.Operator):
         param horizonDir The desired horizon direction.
         return The coordinates of the second vanishing point.
         '''
-        
+
         #find the second vanishing point
         #TODO 1: take principal point into account here
         #TODO 2: if the first vanishing point coincides with the image center,
         #        these lines won't work, but this case should be handled somehow.
         k = -(Fu[0] ** 2 + Fu[1] ** 2 + f ** 2) / (Fu[0] * horizonDir[0] + Fu[1] * horizonDir[1])
         Fv = [Fu[i] + k * horizonDir[i] for i in range(2)]
-        
+
         return Fv
 
     def computeFocalLength(self, Fu, Fv, P):
@@ -1594,32 +1647,32 @@ class CameraCalibrationOperator(bpy.types.Operator):
         \param P the center of projection in normalized image coordinates.
         \return The relative focal length.
         '''
-        
+
         #compute Puv, the orthogonal projection of P onto FuFv
         dirFuFv = normalize([x - y for x, y in zip(Fu, Fv)])
         FvP = [x - y for x, y in zip(P, Fv)]
         proj = dot(dirFuFv, FvP)
         Puv = [proj * x + y for x, y in zip(dirFuFv, Fv)]
-        
+
         PPuv = length([x - y for x, y in zip(P, Puv)])
-        
+
         FvPuv = length([x - y for x, y in zip(Fv, Puv)])
         FuPuv = length([x - y for x, y in zip(Fu, Puv)])
         FuFv = length([x - y for x, y in zip(Fu, Fv)])
         #print("FuFv", FuFv, "FvPuv + FuPuv", FvPuv + FuPuv)
-        
+
         fSq = FvPuv * FuPuv - PPuv * PPuv
         #print("FuPuv", FuPuv, "FvPuv", FvPuv, "PPuv", PPuv, "OPuv", FvPuv * FuPuv)
         #print("fSq = ", fSq, " = ", FvPuv * FuPuv, " - ", PPuv * PPuv)
         if fSq < 0:
-            return None    
+            return None
         f = math.sqrt(fSq)
         #print("dot 1:", dot(normalize(Fu + [f]), normalize(Fv + [f])))
-        
+
         return f
-    
+
     def computeCameraRotationMatrix(self, Fu, Fv, f, P):
-        '''Computes the camera rotation matrix based on two vanishing points 
+        '''Computes the camera rotation matrix based on two vanishing points
         and a focal length as in section 3.3 "Computing the rotation matrix".
         \param Fu the first vanishing point in normalized image coordinates.
         \param Fv the second vanishing point in normalized image coordinates.
@@ -1628,44 +1681,44 @@ class CameraCalibrationOperator(bpy.types.Operator):
         '''
         Fu[0] -= P[0]
         Fu[1] -= P[1]
-        
+
         Fv[0] -= P[0]
         Fv[1] -= P[1]
-        
+
         OFu = [Fu[0], Fu[1], f]
         OFv = [Fv[0], Fv[1], f]
-        
+
         #print("matrix dot", dot(OFu, OFv))
-        
+
         s1 = length(OFu)
         upRc = normalize(OFu)
-        
+
         s2 = length(OFv)
         vpRc = normalize(OFv)
-        
-        wpRc = [upRc[1] * vpRc[2] - upRc[2] * vpRc[1], upRc[2] * vpRc[0] - upRc[0] * vpRc[2], upRc[0] * vpRc[1] - upRc[1] * vpRc[0]] 
-        
+
+        wpRc = [upRc[1] * vpRc[2] - upRc[2] * vpRc[1], upRc[2] * vpRc[0] - upRc[0] * vpRc[2], upRc[0] * vpRc[1] - upRc[1] * vpRc[0]]
+
         M = mathutils.Matrix()
         M[0][0] = Fu[0] / s1
         M[0][1] = Fv[0] / s2
         M[0][2] = wpRc[0]
-        
+
         M[1][0] = Fu[1] / s1
         M[1][1] = Fv[1] / s2
         M[1][2] = wpRc[1]
-        
+
         M[2][0] = f / s1
         M[2][1] = f / s2
         M[2][2] = wpRc[2]
-        
+
         if arePythonMatricesRowMajor():
             M.transpose()
-       
+
         return M
-    
+
     def alignCoordinateAxes(self, M, ax1, ax2):
         '''
-        Modifies the original camera transform to make the coordinate axes line 
+        Modifies the original camera transform to make the coordinate axes line
         up as specified.
         \param M the original camera rotation matrix
         \ax1 The index of the axis to align with the first layer segments.
@@ -1679,9 +1732,9 @@ class CameraCalibrationOperator(bpy.types.Operator):
         zn90Rot = mathutils.Euler((0, 0, math.radians(-90.0)), 'XYZ').to_matrix().to_4x4()
         yn90Rot = mathutils.Euler((0, math.radians(-90.0), 0), 'XYZ').to_matrix().to_4x4()
         xn90Rot = mathutils.Euler((math.radians(-90.0), 0, 0), 'XYZ').to_matrix().to_4x4()
-        
+
         M =  x180Rot * M * z180Rot
-        
+
         if ax1 == 0 and ax2 == 1:
             #print("x,y")
             pass
@@ -1700,17 +1753,17 @@ class CameraCalibrationOperator(bpy.types.Operator):
         elif ax1 == 2 and ax2 == 1:
             #print("z, y")
             M = yn90Rot * M
-        
+
         return M
-    
-    def gatherGreasePencilSegments(self):
+
+    def gatherGreasePencilSegments(self, context):
         '''Collects and returns line segments in normalized image coordinates
         from the first two grease pencil layers.
-        \return A list of line segment sets. [i][j][k][l] is coordinate l of point k 
-        in segment j from layer i. 
+        \return A list of line segment sets. [i][j][k][l] is coordinate l of point k
+        in segment j from layer i.
         '''
-        
-        gp = bpy.context.area.spaces.active.clip.grease_pencil
+
+        gp = context.area.spaces.active.clip.grease_pencil
         gpl = gp.layers
 
         #loop over grease pencil layers and gather line segments
@@ -1727,115 +1780,117 @@ class CameraCalibrationOperator(bpy.types.Operator):
                     #this is a line segment. add it.
                     line = [p.co[0:2] for p in s.points]
                     lines.append(line)
-                    
+
             vpLineSets.append(lines)
-        return vpLineSets    
-    
+        return vpLineSets
+
     def computeIntersectionPointForLineSegments(self, lineSet):
-        '''Computes the intersection point in a least squares sense of 
+        '''Computes the intersection point in a least squares sense of
         a collection of line segments.
         '''
         matrixRows = []
         rhsRows = []
-        
+
         for line in lineSet:
             #a point on the line
-            p = line[0]        
+            p = line[0]
             #a unit vector parallel to the line
             dir = normalize([x - y for x, y in zip(line[1], line[0])])
             #a unit vector perpendicular to the line
             n = [dir[1], -dir[0]]
             matrixRows.append([n[0], n[1]])
             rhsRows.append([p[0] * n[0] + p[1] * n[1]])
-            
+
         m = Mat(matrixRows)
         b = Mat(rhsRows)
         vp = [f[0] for f in m.solve(b)]
         return vp
-    
+
     def computeTriangleOrthocenter(self, verts):
         #print("verts", verts)
         assert(len(verts) == 3)
-        
+
         A = verts[0]
         B = verts[1]
         C = verts[2]
-        
+
         #print("A, B, C", A, B, C)
-        
+
         a = A[0]
         b = A[1]
         c = B[0]
         d = B[1]
         e = C[0]
         f = C[1]
-        
+
         N = b * c+ d * e + f * a - c * f - b * e - a * d
         x = ((d-f) * b * b + (f-b) * d * d + (b-d) * f * f + a * b * (c-e) + c * d * (e-a) + e * f * (a-c) ) / N
         y = ((e-c) * a * a + (a-e) * c * c + (c-a) * e * e + a * b * (f-d) + c * d * (b-f) + e * f * (d-b) ) / N
-       
+
         return (x, y)
-        
-    
+
+
     def relImgCoords2ImgPlaneCoords(self, pt, imageWidth, imageHeight):
         ratio = imageWidth / float(imageHeight)
         sw = ratio
         sh = 1
         return [sw * (pt[0] - 0.5), sh * (pt[1] - 0.5)]
-        
+
     def execute(self, context):
         '''Executes the operator.
         \param context The context in which the operator was executed.
         '''
-        scn = bpy.context.scene
-        singleVp = scn.calibration_type == 'one_vp'
-        useHorizonSegment = scn.use_horizon_segment
-        setBgImg = scn.set_cambg
-        
+        scene = context.scene
+        blam = scene.blam
+
+        singleVp = blam.calibration_type == 'ONE_VP'
+        useHorizonSegment = blam.use_horizon_segment
+        setBgImg = blam.set_cambg
+
         '''
         get the active camera
         '''
-        cam = scn.camera     
+        cam = scene.camera
         if not cam:
             self.report({'ERROR'}, "No active camera.")
             return{'CANCELLED'}
-        
+
         '''
         check settings
         '''
         if singleVp:
-            upAxisIndex = ['x', 'y', 'z'].index(scn.up_axis)
-            vp1AxisIndex = ['x', 'y', 'z'].index(scn.vp1_axis)
-            
+            upAxisIndex = ['x', 'y', 'z'].index(blam.up_axis)
+            vp1AxisIndex = ['x', 'y', 'z'].index(blam.vp1_axis)
+
             if upAxisIndex == vp1AxisIndex:
                 self.report({'ERROR'}, "The up axis cannot be parallel to the axis of the line set.")
-                return{'CANCELLED'}    
+                return{'CANCELLED'}
             vp2AxisIndex = (set([0, 1, 2]) ^ set([upAxisIndex, vp1AxisIndex])).pop()
             vpAxisIndices = [vp1AxisIndex, vp2AxisIndex]
         else:
-            vp1AxisIndex = ['x', 'y', 'z'].index(scn.vp1_axis)
-            vp2AxisIndex = ['x', 'y', 'z'].index(scn.vp2_axis)
+            vp1AxisIndex = ['x', 'y', 'z'].index(blam.vp1_axis)
+            vp2AxisIndex = ['x', 'y', 'z'].index(blam.vp2_axis)
             vpAxisIndices = [vp1AxisIndex, vp2AxisIndex]
-            setBgImg = scn.set_cambg
-            
+            setBgImg = blam.set_cambg
+
             if vpAxisIndices[0] == vpAxisIndices[1]:
                 self.report({'ERROR'}, "The two line sets cannot be parallel to the same axis.")
                 return{'CANCELLED'}
-        
+
         '''
         gather lines for each vanishing point
-        '''        
-        activeSpace = bpy.context.area.spaces.active
-        
-        if not activeSpace.clip:
+        '''
+        active_space = context.area.spaces.active
+
+        if not active_space.clip:
             self.report({'ERROR'}, "There is no active movie clip.")
             return{'CANCELLED'}
-        
+
         #check that we have the number of layers we need
-        if not activeSpace.clip.grease_pencil:
+        if not active_space.clip.grease_pencil:
             self.report({'ERROR'}, "There is no grease pencil datablock.")
             return{'CANCELLED'}
-        gpl = activeSpace.clip.grease_pencil.layers
+        gpl = active_space.clip.grease_pencil.layers
         if len(gpl) == 0:
             self.report({'ERROR'}, "There are no grease pencil layers.")
             return{'CANCELLED'}
@@ -1845,9 +1900,9 @@ class CameraCalibrationOperator(bpy.types.Operator):
         if len(gpl) < 2 and singleVp and useHorizonSegment:
             self.report({'ERROR'}, "Single vanishing point calibration with a custom horizon line requires two grease pencil layers")
             return{'CANCELLED'}
-       
-        vpLineSets = self.gatherGreasePencilSegments()
-        
+
+        vpLineSets = self.gatherGreasePencilSegments(context)
+
         #check that we have the expected number of line segment strokes
         if len(vpLineSets[0]) < 2:
             self.report({'ERROR'}, "The first grease pencil layer must contain at least two line segment strokes.")
@@ -1857,26 +1912,26 @@ class CameraCalibrationOperator(bpy.types.Operator):
             return{'CANCELLED'}
         if singleVp and useHorizonSegment and len(vpLineSets[1]) != 1:
             self.report({'ERROR'}, "The second grease pencil layer must contain exactly one line segment stroke (the horizon line).")
-            return{'CANCELLED'}    
-         
+            return{'CANCELLED'}
+
         '''
         get the principal point P in image plane coordinates
-        TODO: get the value from the camera data panel, 
+        TODO: get the value from the camera data panel,
         currently always using the image center
         '''
-        imageWidth = activeSpace.clip.size[0]
-        imageHeight = activeSpace.clip.size[1]
-        
-        #principal point in image plane coordinates. 
+        imageWidth = active_space.clip.size[0]
+        imageHeight = active_space.clip.size[1]
+
+        #principal point in image plane coordinates.
         #in the middle of the image by default
         P = [0, 0]
-        
+
         if singleVp:
             '''
             calibration using a single vanishing point
             '''
             imgAspect = imageWidth / float(imageHeight)
-            
+
             #compute the horizon direction
             horizDir = normalize([1.0, 0.0]) #flat horizon by default
             if useHorizonSegment:
@@ -1884,14 +1939,14 @@ class CameraCalibrationOperator(bpy.types.Operator):
                 yHorizDir = vpLineSets[1][0][1][1] - vpLineSets[1][0][0][1]
                 horizDir = normalize([-xHorizDir, -yHorizDir])
             #print("horizDir", horizDir)
-            
+
             #compute the vanishing point location
             vp1 = self.computeIntersectionPointForLineSegments(vpLineSets[0])
-            
+
             #get the current relative focal length
-            fAbs = activeSpace.clip.tracking.camera.focal_length
-            sensorWidth = activeSpace.clip.tracking.camera.sensor_width
-            
+            fAbs = active_space.clip.tracking.camera.focal_length
+            sensorWidth = active_space.clip.tracking.camera.sensor_width
+
             f = fAbs / sensorWidth * imgAspect
             #print("fAbs", fAbs, "f rel", f)
             Fu = self.relImgCoords2ImgPlaneCoords(vp1, imageWidth, imageHeight)
@@ -1900,15 +1955,15 @@ class CameraCalibrationOperator(bpy.types.Operator):
             '''
             calibration using two vanishing points
             '''
-            if scn.optical_center_type == 'camdata':
+            if blam.optical_center_type == 'camdata':
                 #get the principal point location from camera data
-                P = [x for x in  activeSpace.clip.tracking.camera.principal]
+                P = [x for x in  active_space.clip.tracking.camera.principal]
                 #print("camera data optical center", P[:])
                 P[0] /= imageWidth
                 P[1] /= imageHeight
                 #print("normlz. optical center", P[:])
                 P = self.relImgCoords2ImgPlaneCoords(P, imageWidth, imageHeight)
-            elif scn.optical_center_type == 'compute':
+            elif blam.optical_center_type == 'compute':
                 if len(vpLineSets) < 3:
                     self.report({'ERROR'}, "A third grease pencil layer is needed to compute the optical center.")
                     return{'CANCELLED'}
@@ -1920,54 +1975,54 @@ class CameraCalibrationOperator(bpy.types.Operator):
             else:
                 #assume optical center in image midpoint
                 pass
-            
+
             #compute the two vanishing points
-            vps = [self.computeIntersectionPointForLineSegments(vpLineSets[i]) for i in range(2)]    
-        
+            vps = [self.computeIntersectionPointForLineSegments(vpLineSets[i]) for i in range(2)]
+
             #order vanishing points along the image x axis
             if vps[1][0] < vps[0][0]:
                 vps.reverse()
                 vpLineSets.reverse()
-                vpAxisIndices.reverse()            
-        
+                vpAxisIndices.reverse()
+
             '''
             compute focal length
             '''
             Fu = self.relImgCoords2ImgPlaneCoords(vps[0], imageWidth, imageHeight)
             Fv = self.relImgCoords2ImgPlaneCoords(vps[1], imageWidth, imageHeight)
-            
+
             f = self.computeFocalLength(Fu, Fv, P)
-            
+
             if f == None:
                 self.report({'ERROR'}, "Failed to compute focal length. Invalid vanishing point constellation.")
                 return{'CANCELLED'}
-        
+
         '''
         compute camera orientation
         '''
         print(Fu, Fv, f)
         #initial orientation based on the vanishing points and focal length
         M = self.computeCameraRotationMatrix(Fu, Fv, f, P)
-        
-        #sanity check: M should be a pure rotation matrix, 
+
+        #sanity check: M should be a pure rotation matrix,
         #so its determinant should be 1
         eps = 0.00001
         if 1.0 - M.determinant() < -eps or 1.0 - M.determinant() > eps:
-            self.report({'ERROR'}, "Non unit rotation matrix determinant: " + str(M.determinant()))    
-            #return{'CANCELLED'} 
-        
+            self.report({'ERROR'}, "Non unit rotation matrix determinant: " + str(M.determinant()))
+            #return{'CANCELLED'}
+
         #align the camera to the coordinate axes as specified
         M = self.alignCoordinateAxes(M, vpAxisIndices[0], vpAxisIndices[1])
         #apply the transform to the camera
         cam.matrix_world = M
-        
+
         '''
         move the camera an arbitrary distance away from the ground plane
         TODO: focus on the origin or something
         '''
         cam.location = (0, 0, 2)
-    
-        #compute an absolute focal length in mm based 
+
+        #compute an absolute focal length in mm based
         #on the current camera settings
         #TODO: make sure this works for all combinations of
         #image dimensions and camera sensor settings
@@ -1977,64 +2032,122 @@ class CameraCalibrationOperator(bpy.types.Operator):
             fMm = cam.data.sensor_width * f
         cam.data.lens = fMm
         self.report({'INFO'}, "Camera focal length set to " + str(fMm))
-        
+
         #move principal point of the blender camera
         r = imageWidth / float(imageHeight)
         cam.data.shift_x = -1 * P[0] / r
         cam.data.shift_y = -1 * P[1] / r
-        
+
         '''
         set the camera background image
         '''
-        bpy.context.scene.render.resolution_x = imageWidth
-        bpy.context.scene.render.resolution_y = imageHeight
-        
+        scene.render.resolution_x = imageWidth
+        scene.render.resolution_y = imageHeight
+
         if setBgImg:
             bpy.ops.clip.set_viewport_background()
-            
-        return{'FINISHED'}    
-    
-    
-        
 
-def initSceneProps():
+        return{'FINISHED'}
+
+
+class BlamSettings(bpy.types.PropertyGroup):
+    """"""
+    calibration_type = EnumProperty(
+        name="Method",
+        description="The type of calibration method to use",
+        items=(("ONE_VP", "One Vanishing Point", "Estimates the camera orientation using a known focal length, a single vanishing point and an optional horizon tilt angle"),
+               ("TWO_VP", "Two Vanishing Points", "Estimates the camera focal length and orientation from two vanishing points"),
+               ),
+        default="TWO_VP"
+        )
+
+    vp1_axis = EnumProperty(
+        name="Parallel to",
+        description="The axis to which the line segments from the first layer are parallel",
+        items=(("x","X Axis","xd"),
+               ("y","Y Axis","yd"),
+               ("z","Z Axis","zd"),
+               ),
+        default="x"
+        )
+
+    vp2_axis = EnumProperty(
+        name="Parallel to",
+        description="The axis to which the line segments from the second layer are parallel",
+        items=(("x","X Axis","xd"),
+               ("y","Y Axis","yd"),
+               ("z","Z Axis","zd"),
+               ),
+        default="y"
+        )
+
+    up_axis = EnumProperty(
+        name="Up Axis",
+        description="The up axis for single vanishing point calibration",
+        items=(("x","X Axis","xd"),
+               ("y","Y Axis","yd"),
+               ("z","Z Axis","zd"),
+               ),
+        default="z"
+        )
+
+    optical_center_type = EnumProperty(
+        name="Optical Center",
+        description="How the optical center is computed for calibration using two vanishing points",
+        items=(("mid","Image Midpoint","Assume the optical center coincides with the image midpoint (reasonable in most cases)"),
+               ("camdata","From Camera Data","Get a known optical center from the current camera data."),
+               ("compute","From 3rd Vanishing Point","Computes the optical center using a third vanishing point from grease pencil layer 3"),
+               ),
+        default="mid"
+        )
+
+    vp1_only = BoolProperty(
+        name="Only use first line set",
+        description="",
+        default=False
+        )
+
+    set_cambg = BoolProperty(
+        name="Set background image",
+        description="Automatically set the current movie clip as the camera background image when performing camera calibration (works only when a 3D view-port is visible)",
+        default=True
+        )
+
+    use_horizon_segment = BoolProperty(
+        name="Compute from grease pencil stroke",
+        description="Extract the horizon angle from a single line segment in the second grease pencil layer. If unchecked, the horizon angle is set to 0",
+        default=True
+        )
+
     '''
-    Focal length and orientation estimation stuff
+    3D reconstruction properties
     '''
-    desc = "The type of calibration method to use."
-    bpy.types.Scene.calibration_type = bpy.props.EnumProperty(items = [('one_vp','one vanishing point','Estimates the camera orientation using a known focal length, a single vanishing point and an optional horizon tilt angle.'),('two_vp','two vanishing points','Estimates the camera focal length and orientation from two vanishing points')],name = "Method", description=desc, default = ('two_vp'))
-    
-    desc = "The axis to which the line segments from the first layer are parallel."
-    bpy.types.Scene.vp1_axis = bpy.props.EnumProperty(items = [('x','x axis','xd'),('y','y axis','yd'),('z','z axis','zd')],name = "Parallel to the", description=desc, default = ('x'))
-    desc = "The axis to which the line segments from the second layer are parallel."
-    bpy.types.Scene.vp2_axis = bpy.props.EnumProperty(items = [('x','x axis','xd'),('y','y axis','yd'),('z','z axis','zd')],name = "Parallel to the", description=desc, default = ('y'))
-    desc = "The up axis for single vanishing point calibration."
-    bpy.types.Scene.up_axis = bpy.props.EnumProperty(items = [('x','x axis','xd'),('y','y axis','yd'),('z','z axis','zd')],name = "Up axis", description=desc, default = ('z'))
-    
-    desc = "How the optical center is computed for calibration using two vanishing points."
-    bpy.types.Scene.optical_center_type = bpy.props.EnumProperty(items = [('mid','Image midpoint','Assume the optical center coincides with the image midpoint (reasonable in most cases).'),('camdata','From camera data','Get a known optical center from the current camera data.'),('compute','From 3rd vanishing point','Computes the optical center using a third vanishing point from grease pencil layer 3.')],name = "Optical center", description=desc, default = ('mid'))
-    
-    bpy.types.Scene.vp1_only = bpy.props.BoolProperty(name="Only use first line set", description=desc, default=False)
-    desc = "Automatically set the current movie clip as the camera background image when performing camera calibration (works only when a 3D view-port is visible)."
-    bpy.types.Scene.set_cambg = bpy.props.BoolProperty(name="Set background image", description=desc, default=True)
-    desc = "Extract the horizon angle from a single line segment in the second grease pencil layer. If unchecked, the horizon angle is set to 0."
-    bpy.types.Scene.use_horizon_segment = bpy.props.BoolProperty(name="Compute from grease pencil stroke", description=desc, default=True)
-    '''
-    3D reconstruction stuff
-    '''
-    desc = "Do not join the faces in the reconstructed mesh. Useful for finding problematic faces."
-    bpy.types.Scene.separate_faces = bpy.props.BoolProperty(name="Separate faces", description=desc, default=False)
-    
-    desc = "The method to use to project the image onto the mesh."
-    bpy.types.Scene.projection_method = bpy.props.EnumProperty(items = [('simple','simple','Uses UV coordinates projected from the camera view. May give warping on large faces.'),('hq','high quality','Uses a UV Project modifier combined with a simple subdivision modifier.')],name = "Method", description=desc, default = ('hq'))
+    separate_faces = BoolProperty(
+        name="Separate Faces",
+        description="Do not join the faces in the reconstructed mesh. Useful for finding problematic faces",
+        default=False
+        )
+
+    projection_method = EnumProperty(
+        name="Method",
+        description="The method to use to project the image onto the mesh",
+        items=(("simple","Simple","Uses UV coordinates projected from the camera view. May give warping on large faces"),
+               ("hq","High Quality","Uses a UV Project modifier combined with a simple subdivision modifier")
+               ),
+        default='hq'
+        )
+
 
 def register():
-    initSceneProps()
     bpy.utils.register_module(__name__)
-    
- 
+    bpy.types.Scene.blam = PointerProperty(type=BlamSettings, name="Blam Settings")
+
+
 def unregister():
     bpy.utils.unregister_module(__name__)
- 
+    del bpy.types.Scene.blam
+
+
 if __name__ == "__main__":
     register()
+
