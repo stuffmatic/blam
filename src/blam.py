@@ -1,6 +1,6 @@
 '''
 blam - Blender Camera Calibration Tools
-Copyright (C) 2012  Per Gantelius
+Copyright (C) 2012-2014  Per Gantelius
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,9 +22,8 @@ import math, cmath
 bl_info = { \
     'name': 'BLAM - The Blender camera calibration toolkit',
     'author': 'Per Gantelius',
-    'version': (0, 0, 5),
-    'blender': (2, 6, 0),
-    'api': 41524,
+    'version': (0, 0, 6),
+    'blender': (2, 6, 2),
     'location': 'Move Clip Editor > Tools Panel > Static Camera Calibration and 3D View > Tools Panel > Photo Modeling Tools',
     'description': 'Reconstruction of 3D geometry and estimation of camera orientation and focal length based on photographs.',
     'tracker_url': 'https://github.com/stuffmatic/blam/issues',
@@ -393,7 +392,10 @@ def solveCubic(a, b, c, d):
 #helper function to determine if the current version
 #of the python api represents matrices as column major
 #or row major.
+'''
 def arePythonMatricesRowMajor():
+    
+    
     v = bpy.app.version
     is262OrGreater = v[0] >= 2 and v[1] >= 62
     is260OrLess = v[0] <= 2 and v[1] <= 60
@@ -419,6 +421,7 @@ def arePythonMatricesRowMajor():
     #do revision check if we're running 2.61
     #matrices are row major starting in revision r42816
     return int(numberString) >= 42816
+'''
 
 #helper function that returns the faces of a mesh. in bmesh builds,
 #this is a list of polygons, and in pre-bmesh builds this is a list
@@ -653,8 +656,8 @@ class ProjectBackgroundImageOntoMeshOperator(bpy.types.Operator):
         pm[3][2] = -1.0
         pm[3][3] = 0.0
         
-        if not arePythonMatricesRowMajor():
-            pm.transpose()
+        #if not arePythonMatricesRowMajor():
+        #    pm.transpose()
         
         returnVerts = []
 
@@ -1658,8 +1661,8 @@ class CameraCalibrationOperator(bpy.types.Operator):
         M[2][1] = f / s2
         M[2][2] = wpRc[2]
         
-        if arePythonMatricesRowMajor():
-            M.transpose()
+        #if arePythonMatricesRowMajor():
+        M.transpose()
        
         return M
     
