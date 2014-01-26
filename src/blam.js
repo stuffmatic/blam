@@ -759,7 +759,7 @@ CalibrationResult.prototype.calibrate3VP = function calibrate3VP(vanishingPoint1
 /**************************************************************************************
  *                             
  **************************************************************************************/
-function computeCameraParameters()
+function recomputeCameraParameters()
 {
     //get image dimensions and aspect ratio
     var imageWidth = window.currentImage.naturalWidth;
@@ -767,13 +767,11 @@ function computeCameraParameters()
     var aspectRatio = imageWidth / imageHeight;
     
     //gather vanishing points in image plane coordinates
-    var vpsImPlCoords = new Array(3);
     for (var i = 0; i < 3; i++)
     {
         var s1 = [controlPoints[4 * i], controlPoints[4 * i + 1]];
         var s2 = [controlPoints[4 * i + 2], controlPoints[4 * i + 3]];
         vanishingPoints[i] = computeIntersectionPoint(s1, s2);
-        vpsImPlCoords[i] = relImageToImagePlane(vanishingPoints[i], aspectRatio);
     }
     
     //perform calibration.
@@ -800,28 +798,25 @@ function computeCameraParameters()
     }
     else if (window.numVanishingPoints == 2)
     {
-        window.calibrationResult.calibrate2VP(vanishingPoints[0],
-                                              vanishingPoints[1],
+        window.calibrationResult.calibrate2VP(relImageToImagePlane(vanishingPoints[0], aspectRatio),
+                                              relImageToImagePlane(vanishingPoints[1], aspectRatio),
                                               aspectRatio,
-                                              controlPoints[CP_PRINCIPAL],
-                                              controlPoints[CP_ORIGIN]);
+                                              relImageToImagePlane(controlPoints[CP_PRINCIPAL], aspectRatio),
+                                              relImageToImagePlane(controlPoints[CP_ORIGIN], aspectRatio));
     }
     else
     {
-        window.calibrationResult.calibrate3VP(vanishingPoints[0],
-                                              vanishingPoints[1],
-                                              vanishingPoints[2],
+        window.calibrationResult.calibrate3VP(relImageToImagePlane(vanishingPoints[0], aspectRatio),
+                                              relImageToImagePlane(vanishingPoints[1], aspectRatio),
+                                              relImageToImagePlane(vanishingPoints[2], aspectRatio),
                                               aspectRatio,
-                                              controlPoints[CP_ORIGIN]);
+                                              relImageToImagePlane(controlPoints[CP_ORIGIN], aspectRatio));
     }
-    
     
     //
     setMatrixLabel(ID_MATRIX_LABEL, window.calibrationResult.orientationMatrix);
     setVectorLabel(ID_AXIS_ANGLE_LABEL, window.calibrationResult.orientationAxisAngle);
     setVectorLabel(ID_QUAT_LABEL, window.calibrationResult.orientationQuaternion);
-
-    
 }
 
 function checkBrowserCompatibility()
@@ -915,6 +910,7 @@ function startLoadingImageFromURL(url)
     {
         window.currentImage = null;
         window.currentImage = newImage;
+        recomputeCameraParameters();
         draw();
     };
 }
@@ -1050,7 +1046,7 @@ function onMouseMove(e)
         controlPoints[idx][0] = Math.min(Math.max(0, controlPoints[idx][0]), 1.0);
         controlPoints[idx][1] = Math.min(Math.max(0, controlPoints[idx][1]), 1.0);
         
-        computeCameraParameters();
+        recomputeCameraParameters();
         
         drawOverlay();
     }
@@ -1778,7 +1774,6 @@ $(document).ready(function()
         drawOverlay();
     });
                   
-                  
     $("#reset").click(function()
     {
         reset();
@@ -1791,22 +1786,11 @@ $(document).ready(function()
     loadStateFromQueryString(DEFAULT_STATE_QUERY_STRING);
                   
     $("#splashContainer").remove();
-    
-    if (window.debug)
+                  
+    if (false && window.debug)
     {
                   
         startLoadingImageFromURL("webcube.png");
-        
-        setLabelText(ID_SHARE_URL_LABEL, getShareURL());
-        setLabelText(ID_CALIBRATION_INFO_LABEL, "testing info label");
-        setLabelText(ID_AXIS_ANGLE_LABEL, "testing axis angle label");
-        setVectorLabel(ID_QUAT_LABEL, [23, 3, 1, 9.343232]);
-        setLabelText(ID_EULER_LABEL, "testing euler label");
-        //setLabelText(ID_MATRIX_LABEL, "testing matrix label");
-        setLabelText(ID_TRANSLATION_LABEL, "testing translation label");
-        setLabelText(ID_SHARE_URL_LABEL, "testing url label");
-        setLabelText(ID_FIELD_OF_VIEW_LABEL, "testing fov label");
-        setLabelText(ID_FOCAL_LENGTH_LABEL, "testing focal length label");
     }
    
 });
