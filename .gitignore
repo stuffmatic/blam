@@ -1,2 +1,4 @@
 .DS_Store
 *.blend*
+/env/
+/.mypy_cache/
