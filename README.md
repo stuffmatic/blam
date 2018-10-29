@@ -1,3 +1,7 @@
+🚨 __I'm building a stand alone camera matching app called fSpy that is now in alpha. [Check it out!](https://fspy.io)__ 
+
+--
+
 # What is this?
 
 This is BLAM, a camera and [video projector calibration](https://github.com/stuffmatic/blam/wiki/Video-Projector-Calibration) toolkit for [Blender](http://www.blender.org) in the form of an add-on, written in python, that facilitates modeling based on photographs.
