@@ -1521,6 +1521,7 @@ class CameraCalibrationPanel(bpy.types.Panel):
     '''
     The GUI for the focal length and camera orientation functionality.
     '''
+    bl_category = "blam"
     bl_label = "Static Camera Calibration"    
     bl_space_type = "CLIP_EDITOR"    
     bl_region_type = "TOOLS"    
